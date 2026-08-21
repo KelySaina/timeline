@@ -1,0 +1,29 @@
+# Keep secrets, local state and build output out of the build context. This matters more than
+# image size: the CI workflow exports build layers to the Actions cache with mode=max, so anything
+# copied into an intermediate stage travels with it.
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+# Upload directory for the local storage driver — NOT the source folder of the same name
+# (apps/api/src/modules/photos/storage), which a **/storage glob happily eats.
+/storage
+/apps/api/storage
+**/.deployed_tag
+
+.git
+.github
+.gitignore
+docs
+screens
+*.bak
+*.bak.*
+timeline_deploy
+timeline_deploy.pub
+setup.sh
+scripts
+README.md
+
+# Compose files describe how to run the stack, not how to build an image.
+docker-compose*.yml

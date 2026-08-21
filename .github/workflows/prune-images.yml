@@ -1,0 +1,26 @@
+name: Prune old container images
+
+# Every successful push to main leaves a new :<sha>-tagged image in GHCR.
+# deploy.sh only needs the current one and the immediately-previous one (its
+# rollback target — see .deployed_tag), so anything older is safe to delete.
+on:
+  schedule:
+    - cron: '0 3 * * 0' # Sundays 03:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        package: [timeline-api, timeline-web]
+    steps:
+      - name: Prune old versions of ${{ matrix.package }}
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: container
+          # Keep 2: what is deployed now, plus deploy.sh's rollback target.
+          min-versions-to-keep: 2

@@ -1,0 +1,219 @@
+name: CI/CD
+
+# Test on every push + PR. Build images and deploy only on green pushes to main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same ref cancels an in-flight run (no overlapping deploys).
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_API: ghcr.io/kelysaina/timeline-api
+  IMAGE_WEB: ghcr.io/kelysaina/timeline-web
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 0. Detect what actually changed, so a docs-only push doesn't burn CI minutes
+  #    testing, building and deploying things that couldn't have broken.
+  # ---------------------------------------------------------------------------
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      core: ${{ steps.filter.outputs.core }}
+    steps:
+      # paths-filter needs real git history to diff against on push events.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+            web:
+              - 'apps/web/**'
+            core:
+              - '.github/workflows/**'
+              - 'infra/**'
+              - 'scripts/**'
+              - 'docker-compose*.yml'
+              - 'setup.sh'
+              - 'package.json'
+              - 'package-lock.json'
+
+  # ---------------------------------------------------------------------------
+  # 1. Tests — the gate. Nothing builds or deploys unless these pass.
+  # ---------------------------------------------------------------------------
+  test-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: timeline
+          POSTGRES_PASSWORD: timeline
+          POSTGRES_DB: timeline_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U timeline" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://timeline:timeline@127.0.0.1:5432/timeline_test
+      SESSION_SECRET: ci-only-session-secret-not-used-anywhere-else
+      UPLOAD_DIR: /tmp/timeline-uploads
+      # Points at the MinIO started below, for the S3 driver run.
+      S3_ENDPOINT: http://127.0.0.1:9000
+      S3_BUCKET: timeline-photos-ci
+      S3_ACCESS_KEY_ID: ci-root
+      S3_SECRET_ACCESS_KEY: ci-root-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+
+      # MinIO cannot be a service container: those cannot override the image's
+      # command, and the entrypoint needs `server /data` or it exits immediately.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=ci-root -e MINIO_ROOT_PASSWORD=ci-root-secret \
+            minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1 && break
+            sleep 2
+          done
+
+      - run: npm run typecheck -w @timeline/api
+      # Both storage drivers, because the photo path differs between them and
+      # only one of the two runs in production.
+      - name: Tests (local storage driver)
+        run: npm test
+      - name: Tests (S3 driver against MinIO)
+        run: npm run test:s3
+
+  test-web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      # `build` runs vue-tsc (typecheck) then vite build. The SPA is same-origin,
+      # so there is no API URL to bake in.
+      - run: npm run build -w @timeline/web
+
+  # ---------------------------------------------------------------------------
+  # 2. Build once, push immutable :<sha> (+ :latest) to GHCR. Layer-cached.
+  # ---------------------------------------------------------------------------
+  build-and-push:
+    needs: [changes, test-api, test-web]
+    # `always()` so a skipped test job (its app wasn't touched) doesn't skip this
+    # too — only an actual test *failure* should block the build.
+    if: |
+      always() &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      (needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.core == 'true') &&
+      (needs.test-api.result == 'success' || needs.test-api.result == 'skipped') &&
+      (needs.test-web.result == 'success' || needs.test-web.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write          # lets GITHUB_TOKEN push to GHCR — no PAT needed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Both images build from the repo root: the Dockerfiles install the npm
+      # workspace, so they need package-lock.json and both package.json files.
+      - name: Build & push api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_API }}:${{ github.sha }}
+            ${{ env.IMAGE_API }}:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build & push web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_WEB }}:${{ github.sha }}
+            ${{ env.IMAGE_WEB }}:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  # ---------------------------------------------------------------------------
+  # 3. Deploy — SSH to the VPS, pull the new images, recreate, health-gate,
+  #    auto-rollback. All logic lives in scripts/deploy.sh (versioned in-repo).
+  # ---------------------------------------------------------------------------
+  deploy:
+    needs: build-and-push
+    if: |
+      always() &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      needs.build-and-push.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read           # so this run's own token can pull the images
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          command_timeout: 15m
+          script: |
+            set -e
+            # A first deploy to a fresh box would otherwise fail here with nothing
+            # but "cd: no such file or directory". Say what to run instead.
+            if [ ! -d ~/timeline/.git ]; then
+              echo "::error::~/timeline does not exist on this host — bootstrap it once, then re-run this job:"
+              echo "  git clone https://github.com/${{ github.repository }}.git ~/timeline"
+              echo "  cd ~/timeline && ./setup.sh --domain <your-host>"
+              exit 1
+            fi
+            cd ~/timeline
+            # Sync the repo to this commit FIRST, so the right compose files and
+            # deploy script exist before we run them. The token keeps working if
+            # this repo ever becomes private; a public repo fetches fine anyway.
+            export GITHUB_TOKEN='${{ secrets.GITHUB_TOKEN }}'
+            git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')" fetch --all --prune
+            git checkout --force '${{ github.sha }}'
+            export IMAGE_TAG='${{ github.sha }}'
+            export GHCR_USER='${{ github.repository_owner }}'
+            # The run's own token can pull from GHCR while the job lasts, so a
+            # long-lived PAT is only needed if you also want to pull by hand.
+            export GHCR_TOKEN='${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}'
+            bash scripts/deploy.sh

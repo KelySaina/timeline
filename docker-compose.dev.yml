@@ -1,0 +1,43 @@
+# Development overlay: hot reload on both apps, and the backing services reachable from the host.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Everything published here binds to 127.0.0.1 on purpose — convenient locally, never on a LAN.
+name: timeline
+
+services:
+  db:
+    ports:
+      - '127.0.0.1:${DB_PORT:-55433}:5432'
+
+  minio:
+    ports:
+      - '127.0.0.1:${MINIO_API_PORT:-9400}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9401}:9001'
+
+  api:
+    build:
+      target: deps
+    environment:
+      NODE_ENV: development
+    command: ['npm', 'run', 'dev', '-w', '@timeline/api']
+    working_dir: /app
+    volumes:
+      - ./apps/api:/app/apps/api
+      - /app/apps/api/node_modules
+    ports:
+      - '127.0.0.1:${API_PORT:-4281}:4281'
+
+  web:
+    build:
+      dockerfile: apps/web/Dockerfile
+      target: build
+    command: ['npm', 'run', 'dev', '-w', '@timeline/web', '--', '--host', '0.0.0.0', '--port', '80']
+    working_dir: /app
+    environment:
+      VITE_API_PROXY: http://api:4281
+    volumes:
+      - ./apps/web:/app/apps/web
+      - /app/apps/web/node_modules
+    depends_on:
+      api:
+        condition: service_started

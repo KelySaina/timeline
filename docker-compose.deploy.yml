@@ -1,0 +1,15 @@
+# ============================================================================
+# Timeline — deploy overlay. Replaces the locally-built api/web with the images
+# CI pushed to GHCR, selected by ${IMAGE_TAG} (a git SHA).
+#
+# Used by scripts/deploy.sh. The base files are untouched, so a developer still
+# gets `docker compose up --build` from source.
+# ============================================================================
+services:
+  api:
+    image: ghcr.io/kelysaina/timeline-api:${IMAGE_TAG:-latest}
+    pull_policy: always
+
+  web:
+    image: ghcr.io/kelysaina/timeline-web:${IMAGE_TAG:-latest}
+    pull_policy: always

@@ -1,0 +1,30 @@
+# ============================================================================
+# Timeline — production overlay. Puts the app behind the Traefik that already
+# runs on this box (the izyah stack owns it), so TLS and ACME are handled once
+# for every app on the server instead of per project.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# The base file still publishes the web container on ${WEB_BIND} — setup.sh
+# --domain sets that to 127.0.0.1, which keeps a local health probe working
+# without exposing anything to the internet.
+# ============================================================================
+services:
+  web:
+    networks: [internal, proxy]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.timeline.rule=Host(`${APP_DOMAIN:?set APP_DOMAIN in .env}`)
+      - traefik.http.routers.timeline.entrypoints=websecure
+      - traefik.http.routers.timeline.tls=true
+      - traefik.http.routers.timeline.tls.certresolver=letsencrypt
+      - traefik.http.services.timeline.loadbalancer.server.port=80
+      # The container sits on two networks; without this Traefik may pick the
+      # internal one and never reach it.
+      - traefik.docker.network=${PROXY_NETWORK:-izyah}
+
+networks:
+  # Created by whichever stack owns Traefik. Never created here.
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-izyah}

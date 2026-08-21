@@ -3,7 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "description": "A private, shared relationship timeline for two people.",
-  "workspaces": ["apps/api", "apps/web"],
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
   "scripts": {
     "dev": "npm-run-all --parallel dev:api dev:web",
     "dev:api": "npm run dev -w @timeline/api",
@@ -11,12 +14,20 @@
     "build": "npm run build -w @timeline/api && npm run build -w @timeline/web",
     "typecheck": "npm run typecheck -w @timeline/api && npm run typecheck -w @timeline/web",
     "test": "npm run test -w @timeline/api",
-    "db:push": "npm run db:push -w @timeline/api",
-    "db:seed": "npm run db:seed -w @timeline/api",
-    "setup": "npm install && npm run db:push"
+    "migrate": "npm run db:push -w @timeline/api",
+    "seed": "docker compose exec -T api node dist/db/seed.js",
+    "seed:local": "npm run db:seed -w @timeline/api",
+    "up": "docker compose up -d --build",
+    "down": "docker compose down",
+    "logs": "docker compose logs -f api web",
+    "visual": "node scripts/visual-check.mjs",
+    "test:s3": "npm run test:s3 -w @timeline/api"
   },
   "devDependencies": {
-    "npm-run-all": "^4.1.5"
+    "npm-run-all": "^4.1.5",
+    "playwright": "^1.62.1"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
