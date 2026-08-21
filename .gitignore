@@ -3,8 +3,11 @@ dist/
 .env
 .env.bak.*
 *.log
-storage/
-apps/api/storage/
+# Upload directory for the local storage driver. NOT the source folder of the same name
+# (apps/api/src/modules/photos/storage) — a bare `storage/` pattern eats that too, which is
+# exactly how the storage driver went missing from the first commit.
+/storage/
+/apps/api/storage/
 apps/web/dev-dist/
 screens/
 .DS_Store

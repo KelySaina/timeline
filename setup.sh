@@ -290,6 +290,21 @@ fi
 # so re-running setup.sh on the server never silently un-routes Traefik.
 if [ -z "$DOMAIN" ]; then DOMAIN="$(read_env_value APP_DOMAIN)"; fi
 
+# Compose reads COMPOSE_FILE out of .env, so once this is set every plain
+# `docker compose ...` in this directory carries the production overlay. Without it the
+# stack comes up with no Traefik labels, no router matches the host, and Traefik answers
+# with its self-signed fallback certificate — which looks like a TLS bug and is not one.
+COMPOSE_FILE_BLOCK=""
+if [ -n "$DOMAIN" ]; then
+  COMPOSE_FILE_BLOCK="# Every \`docker compose\` in this directory picks these up (Traefik labels live in the overlay).
+COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml"
+fi
+
+if [ -n "$DOMAIN" ] && ! docker network inspect "${PROXY_NETWORK:-izyah}" >/dev/null 2>&1; then
+  warn "the Traefik network '${PROXY_NETWORK:-izyah}' does not exist on this host yet —"
+  warn "  the stack will not start until whichever project owns Traefik is up."
+fi
+
 if [ -n "$WEAK_KEYS" ]; then
   say ""
   warn "Placeholder secrets remain, and data volumes already exist, so they were not replaced."
@@ -327,6 +342,7 @@ S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
 # Hostname Traefik routes to this app (docker-compose.prod.yml). Empty = no proxy.
 APP_DOMAIN=$DOMAIN
 PROXY_NETWORK=${PROXY_NETWORK:-izyah}
+$COMPOSE_FILE_BLOCK
 
 # --- host ports ---
 WEB_BIND=$WEB_BIND
@@ -446,7 +462,11 @@ fi
 say "  ${BOLD}Not published${OFF}  postgres, minio — reachable only inside the compose network"
 say ""
 if [ "$DO_START" -eq 0 ]; then
-  say "  Start it:      docker compose up -d --build"
+  if [ "$MODE" = "server" ]; then
+    say "  Start it:      docker compose up -d --build   ${DIM}(COMPOSE_FILE in .env adds the Traefik overlay)${OFF}"
+  else
+    say "  Start it:      docker compose up -d --build"
+  fi
 fi
 say "  Logs:          docker compose logs -f api web"
 say "  Demo data:     npm run seed"
@@ -459,6 +479,11 @@ if [ "$MODE" = "server" ]; then
   say "   2. proxy ${DOMAIN} to 127.0.0.1:${WEB_PORT}, forwarding X-Forwarded-Proto"
   say "   3. allow only 80/443 through the firewall; nothing here needs another port open"
   say "   4. keep .env out of backups that leave the machine, or encrypt them"
+  say ""
+  say "  ${BOLD}If the browser shows a self-signed certificate${OFF}, Traefik matched no router for"
+  say "  this host — the app is running unrouted, which is not a TLS problem:"
+  say "     docker compose config | grep traefik.http.routers   ${DIM}# labels present?${OFF}"
+  say "     docker network inspect ${PROXY_NETWORK:-izyah} | grep timeline-web"
   say ""
 fi
 if [ -n "$CHANGED_PORTS" ]; then
