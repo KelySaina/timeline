@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useTimelineStore } from '@/stores/timeline';
 import { useUiStore } from '@/stores/ui';
+import type { Theme } from '@/api/types';
+import { themeMeta } from '@/lib/themes';
+import { useToastStore } from '@/stores/toast';
+import AppSheet from './ui/AppSheet.vue';
 import Avatar from './ui/Avatar.vue';
 import EventForm from './EventForm.vue';
 import MemoryModal from './MemoryModal.vue';
+import ThemePicker from './ThemePicker.vue';
 
 const auth = useAuthStore();
 const timeline = useTimelineStore();
@@ -21,8 +26,21 @@ const tabs = computed(() => [
   { name: 'profile', label: 'Us', icon: 'user' },
 ]);
 
-const isDusk = computed(() => auth.couple?.theme === 'dusk');
-const toggleTheme = () => auth.updateCouple({ theme: isDusk.value ? 'dawn' : 'dusk' });
+const toasts = useToastStore();
+const themeOpen = ref(false);
+const savingTheme = ref(false);
+const currentTheme = computed(() => themeMeta(auth.couple?.theme));
+
+async function setTheme(theme: Theme): Promise<void> {
+  savingTheme.value = true;
+  try {
+    await auth.updateCouple({ theme });
+  } catch {
+    toasts.error('Could not save that theme');
+  } finally {
+    savingTheme.value = false;
+  }
+}
 
 const title = computed(() => auth.couple?.title || auth.displayNames.join(' & ') || 'Our story');
 
@@ -55,10 +73,11 @@ function onSaved(): void {
 
       <button
         class="btn btn-quiet h-9 w-9 rounded-full p-0"
-        :aria-label="isDusk ? 'Switch to light' : 'Switch to dark'"
-        @click="toggleTheme"
+        aria-label="Change theme"
+        :title="`Theme: ${currentTheme.label}`"
+        @click="themeOpen = true"
       >
-        <FaIcon :icon="isDusk ? 'sun' : 'moon'" />
+        <FaIcon icon="palette" />
       </button>
       <button class="btn btn-primary hidden h-9 px-3.5 sm:inline-flex" @click="ui.compose()">
         <FaIcon icon="plus" />
@@ -121,5 +140,18 @@ function onSaved(): void {
       @saved="onSaved"
     />
     <MemoryModal :event="ui.viewing" @close="ui.view(null)" @edit="ui.edit($event)" />
+
+    <AppSheet
+      :open="themeOpen"
+      title="Choose a mood"
+      :subtitle="`Currently ${currentTheme.label} — ${currentTheme.blurb.toLowerCase()}`"
+      @close="themeOpen = false"
+    >
+      <ThemePicker
+        :model-value="auth.couple?.theme ?? 'dawn'"
+        :busy="savingTheme"
+        @update:model-value="setTheme"
+      />
+    </AppSheet>
   </div>
 </template>

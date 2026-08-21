@@ -37,10 +37,16 @@ messaging app. Two people, one story, private by default.
 | Search | Title, description, tags, location |
 | Photos | Private storage, authenticated delivery, server-side thumbnails |
 | Empty state | "Your story starts here" + 5 guided first memories |
+| Themes | 6 themes (3 daylight, 3 evening), per couple, chosen from a live-preview picker |
 
 **Out (deliberately)** — AI recaps, "on this day", bucket list, date ideas, exports, print, video,
 voice, letters, challenges, widgets, push/email delivery, multiple relationships per user, themes
 beyond the default, comments/reactions. Each is listed in §8 with the seam it will attach to.
+
+Themes started as one of those deferrals and moved in early: the whole UI already read its colour
+from one token set, so a theme is ~25 variables and no component changes. Adding `--on-ember`
+(what sits *on* the accent) was the only structural change — white text is unreadable on the gold
+and periwinkle accents, so the pairing has to be part of the theme rather than a constant.
 
 ## 3. Main user flows
 

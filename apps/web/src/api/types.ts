@@ -25,6 +25,9 @@ export type Mood = (typeof MOODS)[number];
 
 export type DatePrecision = 'day' | 'month' | 'year';
 
+export const THEME_NAMES = ['dawn', 'bloom', 'linen', 'dusk', 'ink', 'midnight'] as const;
+export type Theme = (typeof THEME_NAMES)[number];
+
 export type EventPhoto = { id: string; width: number; height: number; position: number };
 
 export type TimelineEvent = {
@@ -79,7 +82,7 @@ export type Couple = {
   id: string;
   title: string | null;
   startedOn: string | null;
-  theme: 'dawn' | 'dusk';
+  theme: Theme;
   role: 'owner' | 'partner';
   members: Member[];
   together: Elapsed | null;

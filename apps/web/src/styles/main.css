@@ -5,6 +5,18 @@
    every component stays theme-agnostic and nothing hardcodes a colour.
    --------------------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------------------
+   Design tokens. Six themes swap the same variable set, so every component
+   stays theme-agnostic and nothing hardcodes a colour. Three read as daylight,
+   three as evening; all of them stay warm and low-contrast enough to feel like
+   paper rather than a dashboard.
+
+   --ember is the accent (hearts, primary actions) and --on-ember is what sits
+   on top of it: white over the deep accents, near-black over the luminous ones,
+   because white text on gold or periwinkle is unreadable.
+   --------------------------------------------------------------------------- */
+
+/* dawn — warm off-white paper, ember rose. The default. */
 :root {
   --paper: #fbf7f3;
   --paper-deep: #f4ece4;
@@ -17,6 +29,7 @@
   --line-strong: #241f1d2e;
   --ember: #c2544d;
   --ember-soft: #c2544d1f;
+  --on-ember: #fffaf9;
   --shadow-card: 0 1px 2px #241f1d0a, 0 12px 32px -18px #241f1d38;
   --shadow-float: 0 8px 24px -8px #241f1d3d, 0 24px 60px -30px #241f1d4d;
 
@@ -31,6 +44,63 @@
   --type-custom: #8a7f78;
 }
 
+/* bloom — blush paper, plum accent. Softer and more romantic than dawn. */
+.theme-bloom {
+  --paper: #fdf6f7;
+  --paper-deep: #f6e7ec;
+  --surface: #fffdfe;
+  --surface-sunk: #f9eef2;
+  --ink: #2a1f24;
+  --ink-soft: #4d3a4189;
+  --muted: #7d6a72;
+  --line: #2a1f241a;
+  --line-strong: #2a1f242e;
+  --ember: #b8557f;
+  --ember-soft: #b8557f1f;
+  --on-ember: #fff9fb;
+  --shadow-card: 0 1px 2px #2a1f240a, 0 12px 32px -18px #2a1f2438;
+  --shadow-float: 0 8px 24px -8px #2a1f243d, 0 24px 60px -30px #2a1f244d;
+
+  --type-milestone: #b8557f;
+  --type-memory: #a9714f;
+  --type-trip: #4f7d78;
+  --type-birthday: #8d5fa8;
+  --type-gift: #b0603f;
+  --type-celebration: #ab8a2f;
+  --type-conversation: #64708f;
+  --type-life: #6b7a52;
+  --type-custom: #8a7d84;
+}
+
+/* linen — cool sand and sage, terracotta accent. The quiet one. */
+.theme-linen {
+  --paper: #f8f6f1;
+  --paper-deep: #eee9df;
+  --surface: #fffefb;
+  --surface-sunk: #f2eee6;
+  --ink: #22241f;
+  --ink-soft: #3f453b89;
+  --muted: #6e7267;
+  --line: #22241f1a;
+  --line-strong: #22241f2e;
+  --ember: #b06a4f;
+  --ember-soft: #b06a4f1f;
+  --on-ember: #fffaf7;
+  --shadow-card: 0 1px 2px #22241f0a, 0 12px 32px -18px #22241f33;
+  --shadow-float: 0 8px 24px -8px #22241f38, 0 24px 60px -30px #22241f4a;
+
+  --type-milestone: #b06a4f;
+  --type-memory: #96793f;
+  --type-trip: #4c7a63;
+  --type-birthday: #8a6580;
+  --type-gift: #a56a45;
+  --type-celebration: #97862f;
+  --type-conversation: #5c7285;
+  --type-life: #5f7a4a;
+  --type-custom: #7c7c71;
+}
+
+/* dusk — deep warm charcoal, coral accent. Evening on the sofa. */
 .theme-dusk {
   --paper: #17130f;
   --paper-deep: #120f0c;
@@ -43,6 +113,7 @@
   --line-strong: #f5ece436;
   --ember: #e8837a;
   --ember-soft: #e8837a26;
+  --on-ember: #2b1411;
   --shadow-card: 0 1px 2px #0000004d, 0 14px 34px -20px #000000a6;
   --shadow-float: 0 10px 30px -10px #000000b3, 0 30px 70px -30px #000000cc;
 
@@ -57,6 +128,62 @@
   --type-custom: #b3a79f;
 }
 
+/* ink — near-black with warm gold. Reads like a printed keepsake at night. */
+.theme-ink {
+  --paper: #131211;
+  --paper-deep: #0e0d0c;
+  --surface: #1c1b19;
+  --surface-sunk: #171614;
+  --ink: #f0ebe3;
+  --ink-soft: #f0ebe3a3;
+  --muted: #a09a90;
+  --line: #f0ebe31f;
+  --line-strong: #f0ebe336;
+  --ember: #d9a74e;
+  --ember-soft: #d9a74e26;
+  --on-ember: #201a0b;
+  --shadow-card: 0 1px 2px #0000004d, 0 14px 34px -20px #000000a6;
+  --shadow-float: 0 10px 30px -10px #000000b3, 0 30px 70px -30px #000000cc;
+
+  --type-milestone: #d9a74e;
+  --type-memory: #d2a06a;
+  --type-trip: #78b39a;
+  --type-birthday: #c98fc0;
+  --type-gift: #dd9068;
+  --type-celebration: #e2c260;
+  --type-conversation: #93aacb;
+  --type-life: #a6b47a;
+  --type-custom: #b5a99f;
+}
+
+/* midnight — blue hour, periwinkle accent. The only cool theme. */
+.theme-midnight {
+  --paper: #12141c;
+  --paper-deep: #0d0f16;
+  --surface: #1a1d27;
+  --surface-sunk: #161923;
+  --ink: #e9ecf5;
+  --ink-soft: #e9ecf5a3;
+  --muted: #99a0b5;
+  --line: #e9ecf51f;
+  --line-strong: #e9ecf536;
+  --ember: #a3b3f7;
+  --ember-soft: #a3b3f726;
+  --on-ember: #121729;
+  --shadow-card: 0 1px 2px #00000059, 0 14px 34px -20px #000000ad;
+  --shadow-float: 0 10px 30px -10px #000000b8, 0 30px 70px -30px #000000d1;
+
+  --type-milestone: #b79bf0;
+  --type-memory: #d3ab7c;
+  --type-trip: #6fb3b0;
+  --type-birthday: #d98fc4;
+  --type-gift: #dd937d;
+  --type-celebration: #e0c56d;
+  --type-conversation: #8fa6f2;
+  --type-life: #97bd87;
+  --type-custom: #a7aec6;
+}
+
 @theme inline {
   --color-paper: var(--paper);
   --color-paper-deep: var(--paper-deep);
@@ -69,6 +196,7 @@
   --color-line-strong: var(--line-strong);
   --color-ember: var(--ember);
   --color-ember-soft: var(--ember-soft);
+  --color-on-ember: var(--on-ember);
 
   --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -198,7 +326,7 @@
 
   .btn-primary {
     background: var(--ember);
-    color: #fff;
+    color: var(--on-ember);
     box-shadow: 0 8px 20px -12px color-mix(in oklab, var(--ember) 70%, transparent);
   }
   .btn-primary:hover:not(:disabled) { background: color-mix(in oklab, var(--ember) 88%, black); }
@@ -278,6 +406,15 @@
   18% { transform: scale(1.18); }
   34% { transform: scale(1); }
   52% { transform: scale(1.11); }
+}
+
+.theme-switching,
+.theme-switching * {
+  transition:
+    background-color 380ms var(--ease-out-soft),
+    border-color 380ms var(--ease-out-soft),
+    color 380ms var(--ease-out-soft),
+    box-shadow 380ms var(--ease-out-soft) !important;
 }
 
 .reveal { opacity: 0; }

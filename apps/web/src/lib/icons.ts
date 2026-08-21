@@ -5,7 +5,7 @@ import {
   faClock, faCommentDots, faCopy, faEllipsis, faEnvelope, faGift, faHeart, faHouseChimney,
   faImage, faLink, faLocationDot, faLock, faMagnifyingGlass, faMoon, faPen, faPlus, faQuoteLeft,
   faRightFromBracket, faSort, faSpinner, faStar, faSun, faTag, faTrashCan, faUpload, faUser,
-  faUserPlus, faXmark, faPlane, faCalendarDay, faSliders, faCircleUser,
+  faUserPlus, faXmark, faPlane, faCalendarDay, faSliders, faCircleUser, faPalette,
 } from '@fortawesome/free-solid-svg-icons';
 import { faHeart as faHeartOutline, faImages } from '@fortawesome/free-regular-svg-icons';
 
@@ -15,6 +15,6 @@ library.add(
   faClock, faCommentDots, faCopy, faEllipsis, faEnvelope, faGift, faHeart, faHouseChimney,
   faImage, faLink, faLocationDot, faLock, faMagnifyingGlass, faMoon, faPen, faPlus, faQuoteLeft,
   faRightFromBracket, faSort, faSpinner, faStar, faSun, faTag, faTrashCan, faUpload, faUser,
-  faUserPlus, faXmark, faPlane, faCalendarDay, faSliders, faCircleUser,
+  faUserPlus, faXmark, faPlane, faCalendarDay, faSliders, faCircleUser, faPalette,
   faHeartOutline, faImages,
 );

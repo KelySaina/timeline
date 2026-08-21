@@ -6,9 +6,12 @@ import { useAuthStore } from '@/stores/auth';
 import { useTimelineStore } from '@/stores/timeline';
 import { useToastStore } from '@/stores/toast';
 import { formatEventDate, possessive } from '@/lib/format';
+import type { Theme } from '@/api/types';
+import { themeMeta } from '@/lib/themes';
 import AppButton from '@/components/ui/AppButton.vue';
 import Avatar from '@/components/ui/Avatar.vue';
 import CoupleInvite from '@/components/CoupleInvite.vue';
+import ThemePicker from '@/components/ThemePicker.vue';
 
 const auth = useAuthStore();
 const timeline = useTimelineStore();
@@ -26,6 +29,19 @@ const together = computed(() => auth.couple?.together ?? null);
 const stats = computed(() => auth.couple?.stats);
 
 const firstMemory = computed(() => timeline.summary?.firstDate ?? null);
+const currentTheme = computed(() => themeMeta(auth.couple?.theme));
+const savingTheme = ref(false);
+
+async function setTheme(theme: Theme): Promise<void> {
+  savingTheme.value = true;
+  try {
+    await auth.updateCouple({ theme });
+  } catch {
+    toasts.error('Could not save that theme');
+  } finally {
+    savingTheme.value = false;
+  }
+}
 
 async function save(): Promise<void> {
   saving.value = true;
@@ -176,15 +192,17 @@ async function signOut(): Promise<void> {
     </section>
 
     <section class="card mt-4 divide-y divide-[var(--line)]">
-      <div class="flex items-center gap-3 px-5 py-4">
-        <FaIcon :icon="auth.couple.theme === 'dusk' ? 'moon' : 'sun'" class="text-muted" />
-        <span class="flex-1 text-[0.9375rem]">Theme</span>
-        <button
-          class="chip"
-          @click="auth.updateCouple({ theme: auth.couple.theme === 'dusk' ? 'dawn' : 'dusk' })"
-        >
-          {{ auth.couple.theme === 'dusk' ? 'Dusk' : 'Dawn' }}
-        </button>
+      <div class="px-5 py-4">
+        <div class="mb-3.5 flex items-center gap-3">
+          <FaIcon icon="palette" class="text-muted" />
+          <span class="flex-1 text-[0.9375rem]">
+            Theme
+            <span class="block text-[0.75rem] text-muted">
+              {{ currentTheme.label }} · {{ currentTheme.blurb.toLowerCase() }}
+            </span>
+          </span>
+        </div>
+        <ThemePicker :model-value="auth.couple.theme" :busy="savingTheme" @update:model-value="setTheme" />
       </div>
       <div class="flex items-center gap-3 px-5 py-4">
         <FaIcon icon="lock" class="text-muted" />

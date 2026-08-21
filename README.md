@@ -156,6 +156,9 @@ MinIO is AGPLv3; running it unmodified as part of your own service is fine, but 
 - **Photos** — multiple per memory, re-encoded server side, thumbnails for the timeline, delivered
   through the API and never from a public URL.
 - **Two people, one story** — one live invite link at a time, single use, 14-day expiry.
+- **Six themes** — three daylight (dawn, bloom, linen), three evening (dusk, ink, midnight). Every
+  colour in the app, including the nine event-type accents, comes from the theme's token set, and
+  the theme belongs to the relationship rather than the device.
 
 ## Security posture
 

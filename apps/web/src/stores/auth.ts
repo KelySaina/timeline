@@ -1,7 +1,8 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { api } from '@/api/client';
-import type { Couple, InvitePreview, Invitation, User } from '@/api/types';
+import type { Couple, InvitePreview, Invitation, Theme, User } from '@/api/types';
+import { THEMES, themeMeta } from '@/lib/themes';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null);
@@ -23,10 +24,25 @@ export const useAuthStore = defineStore('auth', () => {
     return [mine, theirs].filter(Boolean) as string[];
   });
 
+  let switchTimer = 0;
+
   function applyTheme(): void {
+    const root = document.documentElement;
     const theme = couple.value?.theme ?? 'dawn';
-    document.documentElement.classList.toggle('theme-dusk', theme === 'dusk');
-    document.documentElement.classList.toggle('theme-dawn', theme !== 'dusk');
+    const next = `theme-${themeMeta(theme).id}`;
+    if (root.classList.contains(next)) return;
+
+    // Ease the swap instead of flashing it. The class is removed again so nothing else in the
+    // app carries a global colour transition.
+    root.classList.add('theme-switching');
+    window.clearTimeout(switchTimer);
+    switchTimer = window.setTimeout(() => root.classList.remove('theme-switching'), 420);
+
+    for (const meta of THEMES) root.classList.remove(`theme-${meta.id}`);
+    root.classList.add(next);
+
+    // Keeps the mobile browser chrome in the same mood as the page.
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeMeta(theme).swatch.paper);
   }
 
   function adopt(payload: { user: User | null; couple: Couple | null }): void {
@@ -76,8 +92,14 @@ export const useAuthStore = defineStore('auth', () => {
   async function updateCouple(patch: {
     title?: string | null;
     startedOn?: string | null;
-    theme?: 'dawn' | 'dusk';
+    theme?: Theme;
   }): Promise<void> {
+    // Optimistic for theme changes only: a colour swap that waits for a round trip feels broken,
+    // and the worst case is the server refusing and applyTheme() putting the old one back.
+    if (patch.theme && couple.value) {
+      couple.value = { ...couple.value, theme: patch.theme };
+      applyTheme();
+    }
     const payload = await api.patch<{ couple: Couple }>('/couples/me', patch);
     couple.value = payload.couple;
     applyTheme();

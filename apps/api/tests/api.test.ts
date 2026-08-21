@@ -88,7 +88,8 @@ before(async () => {
     console.log(`[test] storage driver: ${storageName}`);
   } catch (error) {
     const reason = (error as { code?: string }).code === 'ECONNREFUSED'
-      ? `No database at ${process.env.DATABASE_URL ?? '(DATABASE_URL unset)'}.\n` +
+      // Credentials redacted: this message lands in terminals and CI logs.
+      ? `No database at ${(process.env.DATABASE_URL ?? '(DATABASE_URL unset)').replace(/\/\/[^@/]*@/, '//***@')}.\n` +
         'Start one with:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db'
       : (error as Error).message;
     throw new Error(`Cannot run the API suite — ${reason}`);
@@ -138,6 +139,20 @@ describe('auth + couple lifecycle', () => {
     const second = await call(alex, 'POST', '/api/couples', { title: 'Someone else' });
     assert.equal(second.status, 409);
     assert.equal(second.body.error.code, 'already_coupled');
+  });
+
+  it('accepts every shipped theme and rejects anything else', async () => {
+    const user = await signup('Themes');
+    await call(user, 'POST', '/api/couples', {});
+
+    for (const theme of ['bloom', 'linen', 'ink', 'midnight', 'dusk', 'dawn']) {
+      const result = await call(user, 'PATCH', '/api/couples/me', { theme });
+      assert.equal(result.status, 200, theme);
+      assert.equal(result.body.couple.theme, theme);
+    }
+
+    const bogus = await call(user, 'PATCH', '/api/couples/me', { theme: 'neon' });
+    assert.equal(bogus.status, 400);
   });
 
   it('rejects state-changing requests without the CSRF header', async () => {

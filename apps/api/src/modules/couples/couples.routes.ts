@@ -17,7 +17,7 @@ const updateSchema = z
   .object({
     title: z.string().trim().max(80).nullable().optional(),
     startedOn: isoDate.nullable().optional(),
-    theme: z.enum(['dawn', 'dusk']).optional(),
+    theme: z.enum(['dawn', 'bloom', 'linen', 'dusk', 'ink', 'midnight']).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
 

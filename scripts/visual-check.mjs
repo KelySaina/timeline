@@ -35,6 +35,16 @@ async function session(name, viewport) {
 
 const shot = (page, name) => page.screenshot({ path: `${outDir}/${name}.png`, fullPage: false });
 
+/** Drive the real picker rather than the API, so the sheet and the swatches get exercised too. */
+async function chooseTheme(page, theme) {
+  await page.getByRole('button', { name: 'Change theme' }).click();
+  await page.waitForTimeout(280);
+  await page.getByRole('button', { name: new RegExp(`^${theme}\\b`, 'i') }).click();
+  await page.waitForTimeout(520);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+}
+
 async function signIn(page) {
   await page.goto(`${base}/welcome`, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: 'Sign in' }).click();
@@ -82,15 +92,37 @@ async function signIn(page) {
   await page.waitForTimeout(900);
   await shot(page, 'desktop-1-timeline');
 
-  await page.getByRole('button', { name: /Switch to dark/i }).click();
-  await page.waitForTimeout(700);
+  await chooseTheme(page, 'dusk');
   await shot(page, 'desktop-2-timeline-dusk');
-  await page.getByRole('button', { name: /Switch to light/i }).click();
+  await chooseTheme(page, 'dawn');
 
   await page.goto(`${base}/search`, { waitUntil: 'networkidle' });
   await page.locator('input[type="search"]').fill('travel');
   await page.waitForTimeout(900);
   await shot(page, 'desktop-3-search');
+  await context.close();
+}
+
+// --- every theme, so a token typo in one of them cannot ship unseen ----------------------------
+{
+  const { context, page } = await session('themes', { width: 1100, height: 820 });
+  await signIn(page);
+  await page.waitForTimeout(700);
+
+  // The picker itself: six live miniatures, grouped by mood.
+  await page.getByRole('button', { name: 'Change theme' }).click();
+  await page.waitForTimeout(420);
+  await shot(page, 'theme-picker');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(320);
+
+  for (const theme of ['dawn', 'bloom', 'linen', 'dusk', 'ink', 'midnight']) {
+    await chooseTheme(page, theme);
+    await shot(page, `theme-${theme}`);
+  }
+
+  // Leave the demo couple where it started, so screenshots stay comparable run to run.
+  await chooseTheme(page, 'dawn');
   await context.close();
 }
 
