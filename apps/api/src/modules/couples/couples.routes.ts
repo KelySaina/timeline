@@ -5,6 +5,7 @@ import { requireCouple } from '../../middleware/coupleContext.js';
 import { requireUser, verifyCsrf } from '../../middleware/session.js';
 import { valid, validate } from '../../middleware/validate.js';
 import * as service from './couples.service.js';
+import { THEMES } from './themes.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a YYYY-MM-DD date');
 
@@ -17,7 +18,7 @@ const updateSchema = z
   .object({
     title: z.string().trim().max(80).nullable().optional(),
     startedOn: isoDate.nullable().optional(),
-    theme: z.enum(['dawn', 'bloom', 'linen', 'dusk', 'ink', 'midnight']).optional(),
+    theme: z.enum(THEMES).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
 

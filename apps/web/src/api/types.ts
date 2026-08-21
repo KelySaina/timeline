@@ -25,7 +25,18 @@ export type Mood = (typeof MOODS)[number];
 
 export type DatePrecision = 'day' | 'month' | 'year';
 
-export const THEME_NAMES = ['dawn', 'bloom', 'linen', 'dusk', 'ink', 'midnight'] as const;
+// Kept in step with the theme blocks in styles/main.css, the registry in
+// lib/themes.ts, and the API's own list in modules/couples/themes.ts.
+export const THEME_NAMES = [
+  'dawn', 'bloom', 'linen',
+  'dusk', 'ink', 'midnight',
+  'peony', 'garden', 'wildflower', 'sakura',
+  'sepia', 'parchment', 'heirloom', 'postcard', 'velvet',
+  'neon', 'vapor', 'arcade', 'tokyo',
+  'blueprint', 'brass', 'mecha',
+  'starlight', 'aurora', 'nebula',
+  'tide', 'ember',
+] as const;
 export type Theme = (typeof THEME_NAMES)[number];
 
 export type EventPhoto = { id: string; width: number; height: number; position: number };

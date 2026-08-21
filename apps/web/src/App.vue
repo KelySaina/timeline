@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import AppShell from '@/components/AppShell.vue';
+import ThemeAtmosphere from '@/components/ThemeAtmosphere.vue';
 import ToastHost from '@/components/ui/ToastHost.vue';
 import { useAuthStore } from '@/stores/auth';
 
@@ -13,6 +14,8 @@ const framed = computed(() => auth.isSignedIn && auth.hasCouple && !route.meta.g
 </script>
 
 <template>
+  <ThemeAtmosphere fixed />
+
   <div v-if="!auth.ready" class="flex min-h-dvh items-center justify-center text-muted">
     <FaIcon icon="heart" class="animate-heart text-2xl text-[var(--ember)]" />
   </div>

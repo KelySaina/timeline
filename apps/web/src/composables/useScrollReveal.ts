@@ -22,8 +22,14 @@ export function useScrollReveal(root: Ref<HTMLElement | null>, selector = '.reve
     }
     observer = new IntersectionObserver(
       (entries) => {
+        // Rows that cross the line together cascade instead of flashing in at once.
+        // Capped, because a batch of thirty after an infinite-scroll page would
+        // otherwise leave the last row waiting a second and a half.
+        let step = 0;
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
+          (entry.target as HTMLElement).style.setProperty('--reveal-step', String(Math.min(step, 5)));
+          step += 1;
           entry.target.classList.add('is-visible');
           observer?.unobserve(entry.target);
         }

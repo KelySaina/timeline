@@ -41,8 +41,10 @@ export const useAuthStore = defineStore('auth', () => {
     for (const meta of THEMES) root.classList.remove(`theme-${meta.id}`);
     root.classList.add(next);
 
-    // Keeps the mobile browser chrome in the same mood as the page.
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeMeta(theme).swatch.paper);
+    // Keeps the mobile browser chrome in the same mood as the page. Read back from
+    // the applied theme rather than a JS copy of the palette, which can go stale.
+    const paper = getComputedStyle(root).getPropertyValue('--paper').trim();
+    if (paper) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', paper);
   }
 
   function adopt(payload: { user: User | null; couple: Couple | null }): void {

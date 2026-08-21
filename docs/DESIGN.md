@@ -37,16 +37,30 @@ messaging app. Two people, one story, private by default.
 | Search | Title, description, tags, location |
 | Photos | Private storage, authenticated delivery, server-side thumbnails |
 | Empty state | "Your story starts here" + 5 guided first memories |
-| Themes | 6 themes (3 daylight, 3 evening), per couple, chosen from a live-preview picker |
+| Themes | 27 themes in 8 collections, per couple, browsed in a theme store with live preview tiles |
 
 **Out (deliberately)** — AI recaps, "on this day", bucket list, date ideas, exports, print, video,
 voice, letters, challenges, widgets, push/email delivery, multiple relationships per user, themes
 beyond the default, comments/reactions. Each is listed in §8 with the seam it will attach to.
 
 Themes started as one of those deferrals and moved in early: the whole UI already read its colour
-from one token set, so a theme is ~25 variables and no component changes. Adding `--on-ember`
-(what sits *on* the accent) was the only structural change — white text is unreadable on the gold
-and periwinkle accents, so the pairing has to be part of the theme rather than a constant.
+from one token set, so a theme is ~20 variables and no component changes. Two structural changes
+were needed. `--on-ember` (what sits *on* the accent), because white text is unreadable on the gold
+and periwinkle accents, so the pairing has to belong to the theme. And the nine event-type hues
+became formulas rather than lists: each anchors a semantic hue, bends toward the theme's accent by
+`--type-mix`, and lifts toward `--type-tone` by `--type-lift` on dark paper — which is what keeps
+a theme down to a dozen lines once you have twenty-seven of them.
+
+Motifs came with the same discipline. A theme declares up to three layers (`--motif-*` a tiled SVG
+mask painted in the theme's colour, `--veil-*` a tiled gradient, `--glow-*` one un-tiled gradient)
+and `ThemeAtmosphere` renders them without knowing which theme is on. Two subtleties are worth
+recording, because both looked like "the motifs don't work":
+
+- Anything declared on `:root` applies to `<html>` under *every* theme, so dawn's hand-pinned type
+  hues and its paper grain had to move to `.theme-dawn`. Dawn is reachable as both.
+- A negative-`z-index` layer paints above the root element's background but *below* the `<body>`
+  box's. The page ground therefore lives on `html` alone; an opaque `body` background buried every
+  motif in the app while the store's tiles showed them perfectly.
 
 ## 3. Main user flows
 

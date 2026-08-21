@@ -11,7 +11,7 @@ import AppSheet from './ui/AppSheet.vue';
 import Avatar from './ui/Avatar.vue';
 import EventForm from './EventForm.vue';
 import MemoryModal from './MemoryModal.vue';
-import ThemePicker from './ThemePicker.vue';
+import ThemeStore from './ThemeStore.vue';
 
 const auth = useAuthStore();
 const timeline = useTimelineStore();
@@ -143,13 +143,15 @@ function onSaved(): void {
 
     <AppSheet
       :open="themeOpen"
-      title="Choose a mood"
-      :subtitle="`Currently ${currentTheme.label} — ${currentTheme.blurb.toLowerCase()}`"
+      title="Theme store"
+      :subtitle="`Wearing ${currentTheme.label} — ${currentTheme.blurb.toLowerCase()}`"
+      size="lg"
       @close="themeOpen = false"
     >
-      <ThemePicker
+      <ThemeStore
         :model-value="auth.couple?.theme ?? 'dawn'"
         :busy="savingTheme"
+        :hero="false"
         @update:model-value="setTheme"
       />
     </AppSheet>

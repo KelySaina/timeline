@@ -13,6 +13,7 @@ import { createApp } from '../src/app.js';
 import { pool } from '../src/db/pool.js';
 import { migrate } from '../src/db/migrate.js';
 import { initStorage, storageName } from '../src/modules/photos/storage/index.js';
+import { THEMES } from '../src/modules/couples/themes.js';
 
 let server: Server;
 let base = '';
@@ -145,13 +146,16 @@ describe('auth + couple lifecycle', () => {
     const user = await signup('Themes');
     await call(user, 'POST', '/api/couples', {});
 
-    for (const theme of ['bloom', 'linen', 'ink', 'midnight', 'dusk', 'dawn']) {
+    // Walks the shipped list rather than a copy of it, so adding a theme to the
+    // store without letting the API accept it fails here instead of in the UI.
+    assert.ok(THEMES.length >= 27, `expected the full set of themes, got ${THEMES.length}`);
+    for (const theme of THEMES) {
       const result = await call(user, 'PATCH', '/api/couples/me', { theme });
       assert.equal(result.status, 200, theme);
       assert.equal(result.body.couple.theme, theme);
     }
 
-    const bogus = await call(user, 'PATCH', '/api/couples/me', { theme: 'neon' });
+    const bogus = await call(user, 'PATCH', '/api/couples/me', { theme: 'chartreuse' });
     assert.equal(bogus.status, 400);
   });
 

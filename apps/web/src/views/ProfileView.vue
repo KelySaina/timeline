@@ -7,11 +7,11 @@ import { useTimelineStore } from '@/stores/timeline';
 import { useToastStore } from '@/stores/toast';
 import { formatEventDate, possessive } from '@/lib/format';
 import type { Theme } from '@/api/types';
-import { themeMeta } from '@/lib/themes';
+import { COLLECTIONS, THEMES } from '@/lib/themes';
 import AppButton from '@/components/ui/AppButton.vue';
 import Avatar from '@/components/ui/Avatar.vue';
 import CoupleInvite from '@/components/CoupleInvite.vue';
-import ThemePicker from '@/components/ThemePicker.vue';
+import ThemeStore from '@/components/ThemeStore.vue';
 
 const auth = useAuthStore();
 const timeline = useTimelineStore();
@@ -29,7 +29,6 @@ const together = computed(() => auth.couple?.together ?? null);
 const stats = computed(() => auth.couple?.stats);
 
 const firstMemory = computed(() => timeline.summary?.firstDate ?? null);
-const currentTheme = computed(() => themeMeta(auth.couple?.theme));
 const savingTheme = ref(false);
 
 async function setTheme(theme: Theme): Promise<void> {
@@ -196,13 +195,13 @@ async function signOut(): Promise<void> {
         <div class="mb-3.5 flex items-center gap-3">
           <FaIcon icon="palette" class="text-muted" />
           <span class="flex-1 text-[0.9375rem]">
-            Theme
+            Theme store
             <span class="block text-[0.75rem] text-muted">
-              {{ currentTheme.label }} · {{ currentTheme.blurb.toLowerCase() }}
+              {{ THEMES.length }} looks across {{ COLLECTIONS.length }} collections
             </span>
           </span>
         </div>
-        <ThemePicker :model-value="auth.couple.theme" :busy="savingTheme" @update:model-value="setTheme" />
+        <ThemeStore :model-value="auth.couple.theme" :busy="savingTheme" @update:model-value="setTheme" />
       </div>
       <div class="flex items-center gap-3 px-5 py-4">
         <FaIcon icon="lock" class="text-muted" />

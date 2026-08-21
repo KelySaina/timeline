@@ -156,9 +156,13 @@ MinIO is AGPLv3; running it unmodified as part of your own service is fine, but 
 - **Photos** — multiple per memory, re-encoded server side, thumbnails for the timeline, delivered
   through the API and never from a public URL.
 - **Two people, one story** — one live invite link at a time, single use, 14-day expiry.
-- **Six themes** — three daylight (dawn, bloom, linen), three evening (dusk, ink, midnight). Every
-  colour in the app, including the nine event-type accents, comes from the theme's token set, and
-  the theme belongs to the relationship rather than the device.
+- **A theme store** — 27 themes in 8 collections (daylight, evening, flowery, antique, neon,
+  mechanical, cosmic, elemental), browsed from live preview tiles on the *Us* screen. Every colour
+  in the app, including the nine event-type accents, comes from the theme's token set, and the
+  theme belongs to the relationship rather than the device.
+- **Motifs and motion** — each theme paints up to three decorative layers behind the app (a tiled
+  motif, a gradient veil, one glow) driven purely by CSS variables: petals fall, gears creep, rain
+  runs down Tokyo, stars twinkle. All of it stops under `prefers-reduced-motion`.
 
 ## Security posture
 

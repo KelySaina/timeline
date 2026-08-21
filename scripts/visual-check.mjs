@@ -35,15 +35,28 @@ async function session(name, viewport) {
 
 const shot = (page, name) => page.screenshot({ path: `${outDir}/${name}.png`, fullPage: false });
 
-/** Drive the real picker rather than the API, so the sheet and the swatches get exercised too. */
+/** Drive the real store rather than the API, so the sheet and the tiles get exercised too. */
 async function chooseTheme(page, theme) {
   await page.getByRole('button', { name: 'Change theme' }).click();
   await page.waitForTimeout(280);
-  await page.getByRole('button', { name: new RegExp(`^${theme}\\b`, 'i') }).click();
+  // Tiles are labelled "Dawn — warm paper and ember"; the em dash is what keeps
+  // this from also matching the collection chip of the same name (Neon, Ink...).
+  await page.getByRole('button', { name: new RegExp(`^${theme} \u2014`, 'i') }).click();
   await page.waitForTimeout(520);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
 }
+
+/** What the applied theme actually computes to, straight off the root element. */
+const themeTokens = (page) =>
+  page.evaluate(() => {
+    const css = getComputedStyle(document.documentElement);
+    return {
+      classes: document.documentElement.className,
+      paper: css.getPropertyValue('--paper').trim(),
+      ember: css.getPropertyValue('--ember').trim(),
+    };
+  });
 
 async function signIn(page) {
   await page.goto(`${base}/welcome`, { waitUntil: 'networkidle' });
@@ -105,21 +118,53 @@ async function signIn(page) {
 
 // --- every theme, so a token typo in one of them cannot ship unseen ----------------------------
 {
+  const THEMES = [
+    'dawn', 'bloom', 'linen',
+    'dusk', 'ink', 'midnight',
+    'peony', 'garden', 'wildflower', 'sakura',
+    'sepia', 'parchment', 'heirloom', 'postcard', 'velvet',
+    'neon', 'vapor', 'arcade', 'tokyo',
+    'blueprint', 'brass', 'mecha',
+    'starlight', 'aurora', 'nebula',
+    'tide', 'ember',
+  ];
+
   const { context, page } = await session('themes', { width: 1100, height: 820 });
   await signIn(page);
   await page.waitForTimeout(700);
 
-  // The picker itself: six live miniatures, grouped by mood.
+  // The store in the header sheet: collections, live tiles, cinematic labels.
   await page.getByRole('button', { name: 'Change theme' }).click();
   await page.waitForTimeout(420);
-  await shot(page, 'theme-picker');
+  await shot(page, 'theme-store-sheet');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(320);
 
-  for (const theme of ['dawn', 'bloom', 'linen', 'dusk', 'ink', 'midnight']) {
+  // And the full store on Us, where it lives.
+  await page.getByRole('link', { name: /Us/ }).first().click();
+  await page.waitForTimeout(700);
+  await shot(page, 'theme-store-profile');
+  await page.getByRole('link', { name: /Story/ }).first().click();
+  await page.waitForTimeout(500);
+
+  // A theme with no CSS block would silently inherit dawn's tokens, so the run
+  // fails if two themes compute to the same paper+accent pair.
+  const seen = new Map();
+  for (const theme of THEMES) {
     await chooseTheme(page, theme);
     await shot(page, `theme-${theme}`);
+
+    const tokens = await themeTokens(page);
+    if (!tokens.classes.includes(`theme-${theme}`)) {
+      problems.push(`[themes] ${theme} was never applied (classes: ${tokens.classes})`);
+    }
+    const fingerprint = `${tokens.paper}|${tokens.ember}`;
+    if (seen.has(fingerprint)) {
+      problems.push(`[themes] ${theme} computes identically to ${seen.get(fingerprint)} — missing a CSS block?`);
+    }
+    seen.set(fingerprint, theme);
   }
+  console.log(`  ${seen.size} distinct themes rendered`);
 
   // Leave the demo couple where it started, so screenshots stay comparable run to run.
   await chooseTheme(page, 'dawn');

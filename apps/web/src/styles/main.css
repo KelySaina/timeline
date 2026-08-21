@@ -1,23 +1,53 @@
 @import 'tailwindcss';
 
 /* ---------------------------------------------------------------------------
-   Design tokens. Two themes ("dawn" and "dusk") swap the same variables, so
-   every component stays theme-agnostic and nothing hardcodes a colour.
-   --------------------------------------------------------------------------- */
-
-/* ---------------------------------------------------------------------------
-   Design tokens. Six themes swap the same variable set, so every component
-   stays theme-agnostic and nothing hardcodes a colour. Three read as daylight,
-   three as evening; all of them stay warm and low-contrast enough to feel like
-   paper rather than a dashboard.
+   Design tokens. Twenty-seven themes swap the same variable set, so every
+   component stays theme-agnostic and nothing hardcodes a colour. They are
+   grouped into collections (daylight, evening, flowery, antique, neon,
+   mechanical, cosmic, elemental) in lib/themes.ts, which is what the theme
+   store on the Us screen browses.
 
    --ember is the accent (hearts, primary actions) and --on-ember is what sits
    on top of it: white over the deep accents, near-black over the luminous ones,
    because white text on gold or periwinkle is unreadable.
    --------------------------------------------------------------------------- */
 
-/* dawn — warm off-white paper, ember rose. The default. */
+/* ---------------------------------------------------------------------------
+   Derived defaults, so a new theme is a dozen lines rather than thirty.
+
+   The nine event-type hues are FORMULAS here, not colours: each one anchors a
+   semantic hue (a trip is green, a birthday is plum) and then bends toward the
+   theme's own accent by --type-mix, and lifts toward --type-tone by --type-lift
+   so it stays legible on dark paper. Substitution happens on the element the
+   declaration lands on, which is <html> — the same element the theme class sits
+   on — so switching theme re-resolves all nine for free. (Nested theme classes,
+   like the store's preview tiles, inherit the root's resolved type hues; they
+   only re-theme paper/surface/ink/line/ember, which is all a tile shows.)
+
+   The six original themes pin their nine by hand below; those hand-tuned values
+   win on source order and are left exactly as they were.
+   --------------------------------------------------------------------------- */
 :root {
+  --type-mix: 16%;
+  --type-lift: 0%;
+  --type-tone: #ffffff;
+
+  --type-milestone: color-mix(in oklab, var(--type-tone) var(--type-lift), color-mix(in oklab, var(--ember) var(--type-mix), #c2544d));
+  --type-memory: color-mix(in oklab, var(--type-tone) var(--type-lift), color-mix(in oklab, var(--ember) var(--type-mix), #b07d4a));
+  --type-trip: color-mix(in oklab, var(--type-tone) var(--type-lift), color-mix(in oklab, var(--ember) var(--type-mix), #4a7d6b));
+  --type-birthday: color-mix(in oklab, var(--type-tone) var(--type-lift), color-mix(in oklab, var(--ember) var(--type-mix), #a3618f));
+  --type-gift: color-mix(in oklab, var(--type-tone) var(--type-lift), color-mix(in oklab, var(--ember) var(--type-mix), #b3623f));
+  --type-celebration: color-mix(in oklab, var(--type-tone) var(--type-lift), color-mix(in oklab, var(--ember) var(--type-mix), #b8912f));
+  --type-conversation: color-mix(in oklab, var(--type-tone) var(--type-lift), color-mix(in oklab, var(--ember) var(--type-mix), #5c7291));
+  --type-life: color-mix(in oklab, var(--type-tone) var(--type-lift), color-mix(in oklab, var(--ember) var(--type-mix), #6b7a4f));
+  --type-custom: color-mix(in oklab, var(--type-tone) var(--type-lift), color-mix(in oklab, var(--ember) var(--type-mix), #8a7f78));
+}
+
+/* dawn — warm off-white paper, ember rose. The default.
+   Also reachable as a class, so a dawn tile in the theme store renders as dawn
+   no matter which theme the page is wearing. */
+:root,
+.theme-dawn {
   --paper: #fbf7f3;
   --paper-deep: #f4ece4;
   --surface: #fffdfb;
@@ -32,6 +62,17 @@
   --on-ember: #fffaf9;
   --shadow-card: 0 1px 2px #241f1d0a, 0 12px 32px -18px #241f1d38;
   --shadow-float: 0 8px 24px -8px #241f1d3d, 0 24px 60px -30px #241f1d4d;
+}
+
+/* Class-scoped, unlike the palette above: anything declared on ":root" applies
+   to <html> under every theme — these nine would shadow the derived formulas,
+   and dawn's paper grain would end up dusted over all twenty-six others. */
+.theme-dawn {
+  /* Paper grain: fine enough to read as fibre rather than as polka dots. */
+  --veil: radial-gradient(circle at 1px 1px, color-mix(in oklab, var(--ink) 32%, transparent) 0.9px, transparent 0);
+  --veil-size: 6px 6px;
+  --veil-opacity: 0.34;
+  --veil-motion: drift-slow 150s ease-in-out infinite alternate;
 
   --type-milestone: #c2544d;
   --type-memory: #b07d4a;
@@ -70,6 +111,12 @@
   --type-conversation: #64708f;
   --type-life: #6b7a52;
   --type-custom: #8a7d84;
+  /* Small hearts, scattered. */
+  --motif-mask: var(--mask-hearts);
+  --motif-size: 126px;
+  --motif-color: var(--ember);
+  --motif-opacity: 0.14;
+  --motif-motion: drift-slow 120s ease-in-out infinite alternate;
 }
 
 /* linen — cool sand and sage, terracotta accent. The quiet one. */
@@ -98,6 +145,10 @@
   --type-conversation: #5c7285;
   --type-life: #5f7a4a;
   --type-custom: #7c7c71;
+  /* Woven crosshatch — the texture the theme is named after. */
+  --veil: repeating-linear-gradient(45deg, color-mix(in oklab, var(--ink) 18%, transparent) 0 1.2px, transparent 1.2px 8px),
+    repeating-linear-gradient(-45deg, color-mix(in oklab, var(--ink) 14%, transparent) 0 1.2px, transparent 1.2px 8px);
+  --veil-opacity: 0.46;
 }
 
 /* dusk — deep warm charcoal, coral accent. Evening on the sofa. */
@@ -126,6 +177,11 @@
   --type-conversation: #8aa5c9;
   --type-life: #9aac74;
   --type-custom: #b3a79f;
+  /* Lamplight bokeh, breathing. */
+  --glow: radial-gradient(38% 26% at 18% 12%, color-mix(in oklab, var(--ember) 34%, transparent), transparent 70%),
+    radial-gradient(30% 22% at 84% 78%, color-mix(in oklab, var(--type-memory) 26%, transparent), transparent 70%);
+  --glow-opacity: 0.7;
+  --glow-motion: breathe 26s ease-in-out infinite;
 }
 
 /* ink — near-black with warm gold. Reads like a printed keepsake at night. */
@@ -154,6 +210,10 @@
   --type-conversation: #93aacb;
   --type-life: #a6b47a;
   --type-custom: #b5a99f;
+  /* Engraver's hatch, like the plate under a printed photograph. */
+  --veil: repeating-linear-gradient(62deg, color-mix(in oklab, var(--ember) 26%, transparent) 0 1.2px, transparent 1.2px 7px);
+  --veil-opacity: 0.5;
+  --veil-motion: drift-slow 180s linear infinite alternate;
 }
 
 /* midnight — blue hour, periwinkle accent. The only cool theme. */
@@ -182,6 +242,658 @@
   --type-conversation: #8fa6f2;
   --type-life: #97bd87;
   --type-custom: #a7aec6;
+  /* Stars, and they twinkle. */
+  --motif-mask: var(--mask-stars);
+  --motif-size: 180px;
+  --motif-color: color-mix(in oklab, var(--ember) 70%, white);
+  --motif-opacity: 0.6;
+  --motif-motion: twinkle 9s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   FLOWERY — the album pressed with flowers.
+   --------------------------------------------------------------------------- */
+
+/* peony — blush paper, deep pink. Petals falling, slowly. */
+.theme-peony {
+  --paper: #fdf6f8;
+  --paper-deep: #f8e7ed;
+  --surface: #fffdfe;
+  --surface-sunk: #fbeff3;
+  --ink: #2d1e25;
+  --ink-soft: #503a4289;
+  --muted: #826b74;
+  --line: #2d1e251a;
+  --line-strong: #2d1e252e;
+  --ember: #d15a80;
+  --ember-soft: #d15a801f;
+  --on-ember: #fff8fa;
+  --shadow-card: 0 1px 2px #2d1e250a, 0 12px 32px -18px #2d1e2538;
+  --shadow-float: 0 8px 24px -8px #2d1e253d, 0 24px 60px -30px #2d1e254d;
+  --type-mix: 20%;
+
+  --motif-mask: var(--mask-petals);
+  --motif-size: 150px;
+  --motif-color: var(--ember);
+  --motif-opacity: 0.15;
+  --motif-loop: 150px;
+  --motif-motion: motif-fall 52s linear infinite;
+}
+
+/* garden — sage and cream, leaf green. Sprigs, drifting. */
+.theme-garden {
+  --paper: #f6f9f2;
+  --paper-deep: #e8f0e0;
+  --surface: #fdfefb;
+  --surface-sunk: #f0f5e9;
+  --ink: #1f2a20;
+  --ink-soft: #3a4a3b89;
+  --muted: #667560;
+  --line: #1f2a201a;
+  --line-strong: #1f2a202e;
+  --ember: #5f8a55;
+  --ember-soft: #5f8a551f;
+  --on-ember: #f9fdf7;
+  --shadow-card: 0 1px 2px #1f2a200a, 0 12px 32px -18px #1f2a2033;
+  --shadow-float: 0 8px 24px -8px #1f2a2038, 0 24px 60px -30px #1f2a204a;
+  --type-mix: 14%;
+
+  --motif-mask: var(--mask-leaves);
+  --motif-size: 165px;
+  --motif-color: var(--ember);
+  --motif-opacity: 0.16;
+  --motif-motion: sway 46s ease-in-out infinite alternate;
+}
+
+/* wildflower — cream meadow, lupine violet. Small blooms everywhere. */
+.theme-wildflower {
+  --paper: #fdfaf1;
+  --paper-deep: #f5efdd;
+  --surface: #fffefa;
+  --surface-sunk: #f8f3e7;
+  --ink: #2a2620;
+  --ink-soft: #48423389;
+  --muted: #78705f;
+  --line: #2a26201a;
+  --line-strong: #2a26202e;
+  --ember: #8f6bb5;
+  --ember-soft: #8f6bb51f;
+  --on-ember: #fdfaff;
+  --shadow-card: 0 1px 2px #2a26200a, 0 12px 32px -18px #2a262033;
+  --shadow-float: 0 8px 24px -8px #2a262038, 0 24px 60px -30px #2a26204a;
+  --type-mix: 18%;
+
+  --motif-mask: var(--mask-blooms);
+  --motif-size: 140px;
+  --motif-color: var(--ember);
+  --motif-opacity: 0.18;
+  --motif-motion: drift-slow 120s ease-in-out infinite alternate;
+}
+
+/* sakura — blossom at night. The dark flowery one. */
+.theme-sakura {
+  --paper: #191119;
+  --paper-deep: #130c13;
+  --surface: #241825;
+  --surface-sunk: #1d131e;
+  --ink: #f7e9ef;
+  --ink-soft: #f7e9efa3;
+  --muted: #b09aa6;
+  --line: #f7e9ef1f;
+  --line-strong: #f7e9ef36;
+  --ember: #ef92ae;
+  --ember-soft: #ef92ae26;
+  --on-ember: #2a0f1a;
+  --shadow-card: 0 1px 2px #0000004d, 0 14px 34px -20px #000000a6;
+  --shadow-float: 0 10px 30px -10px #000000b3, 0 30px 70px -30px #000000cc;
+  --type-mix: 22%;
+  --type-lift: 30%;
+  --type-tone: #ffeef5;
+
+  --motif-mask: var(--mask-petals);
+  --motif-size: 150px;
+  --motif-color: var(--ember);
+  --motif-opacity: 0.32;
+  --motif-loop: 150px;
+  --motif-motion: motif-fall 44s linear infinite;
+  --glow: radial-gradient(60% 40% at 50% -6%, color-mix(in oklab, var(--ember) 40%, transparent), transparent 70%);
+  --glow-opacity: 0.62;
+  --glow-motion: breathe 30s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   ANTIQUE — the album as an object with age on it.
+   --------------------------------------------------------------------------- */
+
+/* sepia — a photograph left in the sun. Halftone grain and a soft vignette. */
+.theme-sepia {
+  --paper: #f4ecdf;
+  --paper-deep: #e7dac4;
+  --surface: #fbf5ea;
+  --surface-sunk: #efe5d4;
+  --ink: #33291d;
+  --ink-soft: #56472f89;
+  --muted: #7d6c54;
+  --line: #33291d1f;
+  --line-strong: #33291d33;
+  --ember: #a5613b;
+  --ember-soft: #a5613b1f;
+  --on-ember: #fdf6ec;
+  --shadow-card: 0 1px 2px #33291d0f, 0 12px 32px -18px #33291d3d;
+  --shadow-float: 0 8px 24px -8px #33291d42, 0 24px 60px -30px #33291d52;
+  --type-mix: 26%;
+
+  --veil: radial-gradient(circle at 1px 1px, color-mix(in oklab, var(--ink) 42%, transparent) 1.1px, transparent 0);
+  --veil-size: 5px 5px;
+  --veil-opacity: 0.28;
+  --glow: radial-gradient(120% 95% at 50% 42%, transparent 52%, color-mix(in oklab, var(--ink) 34%, transparent) 100%);
+  --glow-opacity: 0.75;
+}
+
+/* parchment — ivory and iron-gall ink. Engraver's hatch. */
+.theme-parchment {
+  --paper: #f8f3e5;
+  --paper-deep: #ece3cd;
+  --surface: #fdfaf1;
+  --surface-sunk: #f4eddc;
+  --ink: #2e2a1f;
+  --ink-soft: #4a453489;
+  --muted: #7a7360;
+  --line: #2e2a1f1f;
+  --line-strong: #2e2a1f33;
+  --ember: #9c4b3f;
+  --ember-soft: #9c4b3f1f;
+  --on-ember: #fdf7f2;
+  --shadow-card: 0 1px 2px #2e2a1f0f, 0 12px 32px -18px #2e2a1f38;
+  --shadow-float: 0 8px 24px -8px #2e2a1f3d, 0 24px 60px -30px #2e2a1f4d;
+  --type-mix: 20%;
+
+  --veil: repeating-linear-gradient(62deg, color-mix(in oklab, var(--ink) 26%, transparent) 0 1.2px, transparent 1.2px 7px),
+    repeating-linear-gradient(-18deg, color-mix(in oklab, var(--ink) 15%, transparent) 0 1.2px, transparent 1.2px 12px);
+  --veil-opacity: 0.36;
+}
+
+/* heirloom — deep green and gold filigree. Something kept in a cabinet. */
+.theme-heirloom {
+  --paper: #101714;
+  --paper-deep: #0b120f;
+  --surface: #18211c;
+  --surface-sunk: #131b16;
+  --ink: #eef2e9;
+  --ink-soft: #eef2e9a3;
+  --muted: #9aa79a;
+  --line: #eef2e91f;
+  --line-strong: #eef2e936;
+  --ember: #cfa855;
+  --ember-soft: #cfa85526;
+  --on-ember: #1b1608;
+  --shadow-card: 0 1px 2px #0000004d, 0 14px 34px -20px #000000a6;
+  --shadow-float: 0 10px 30px -10px #000000b3, 0 30px 70px -30px #000000cc;
+  --type-mix: 18%;
+  --type-lift: 30%;
+  --type-tone: #fdf6e4;
+
+  --motif-mask: var(--mask-filigree);
+  --motif-size: 170px;
+  --motif-color: var(--ember);
+  --motif-opacity: 0.17;
+  --motif-motion: drift-slow 220s ease-in-out infinite alternate;
+  --glow: radial-gradient(52% 34% at 82% 8%, color-mix(in oklab, var(--ember) 28%, transparent), transparent 70%);
+  --glow-opacity: 0.56;
+  --glow-motion: breathe 34s ease-in-out infinite;
+}
+
+/* postcard — airmail edges and a franked red. Sent from somewhere. */
+.theme-postcard {
+  --paper: #f8f5ef;
+  --paper-deep: #eae5d9;
+  --surface: #fffdf8;
+  --surface-sunk: #f3efe4;
+  --ink: #2b2a26;
+  --ink-soft: #4a483f89;
+  --muted: #767263;
+  --line: #2b2a261a;
+  --line-strong: #2b2a262e;
+  --ember: #c04a45;
+  --ember-soft: #c04a451f;
+  --on-ember: #fff8f7;
+  --shadow-card: 0 1px 2px #2b2a260a, 0 12px 32px -18px #2b2a2633;
+  --shadow-float: 0 8px 24px -8px #2b2a2638, 0 24px 60px -30px #2b2a264a;
+  --type-mix: 22%;
+
+  --veil: repeating-linear-gradient(-45deg,
+      color-mix(in oklab, var(--ember) 55%, transparent) 0 9px,
+      transparent 9px 18px,
+      color-mix(in oklab, #2f5f9e 55%, transparent) 18px 27px,
+      transparent 27px 36px);
+  --veil-opacity: 0.12;
+  --veil-loop: 51px;
+  --veil-motion: veil-slide 120s linear infinite;
+}
+
+/* velvet — wine and gold, a damask lattice. The most dressed-up theme. */
+.theme-velvet {
+  --paper: #1a0f14;
+  --paper-deep: #140b0f;
+  --surface: #24151f;
+  --surface-sunk: #1d1019;
+  --ink: #f7e9ef;
+  --ink-soft: #f7e9efa3;
+  --muted: #b39aa6;
+  --line: #f7e9ef1f;
+  --line-strong: #f7e9ef36;
+  --ember: #cfa15e;
+  --ember-soft: #cfa15e26;
+  --on-ember: #22150a;
+  --shadow-card: 0 1px 2px #00000059, 0 14px 34px -20px #000000ad;
+  --shadow-float: 0 10px 30px -10px #000000b8, 0 30px 70px -30px #000000d1;
+  --type-mix: 20%;
+  --type-lift: 28%;
+  --type-tone: #fdeee2;
+
+  --motif-mask: var(--mask-filigree);
+  --motif-size: 130px;
+  --motif-color: var(--ember);
+  --motif-opacity: 0.15;
+  --veil: repeating-linear-gradient(45deg, color-mix(in oklab, var(--ember) 22%, transparent) 0 1.2px, transparent 1.2px 26px),
+    repeating-linear-gradient(-45deg, color-mix(in oklab, var(--ember) 22%, transparent) 0 1.2px, transparent 1.2px 26px);
+  --veil-opacity: 0.62;
+  --glow: radial-gradient(70% 45% at 50% 100%, color-mix(in oklab, #8d2f4d 42%, transparent), transparent 70%);
+  --glow-opacity: 0.72;
+  --glow-motion: breathe 28s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   NEON — after dark, lit by signs.
+   --------------------------------------------------------------------------- */
+
+/* neon — magenta and cyan on black, and the sign flickers. */
+.theme-neon {
+  --paper: #0a0910;
+  --paper-deep: #06050b;
+  --surface: #14121d;
+  --surface-sunk: #100e18;
+  --ink: #f3ecff;
+  --ink-soft: #f3ecffa3;
+  --muted: #9d94b8;
+  --line: #f3ecff1f;
+  --line-strong: #f3ecff3d;
+  --ember: #ff4fa3;
+  --ember-soft: #ff4fa326;
+  --on-ember: #1b0512;
+  --shadow-card: 0 1px 2px #00000066, 0 14px 34px -20px #000000b8;
+  --shadow-float: 0 10px 30px -10px #000000c4, 0 30px 70px -30px #000000d6;
+  --type-mix: 34%;
+  --type-lift: 26%;
+  --type-tone: #eaf6ff;
+
+  --veil: repeating-linear-gradient(0deg, color-mix(in oklab, #4fe6ff 44%, transparent) 0 1.3px, transparent 1.3px 46px),
+    repeating-linear-gradient(90deg, color-mix(in oklab, #4fe6ff 44%, transparent) 0 1.3px, transparent 1.3px 46px);
+  --veil-opacity: 0.5;
+  --glow: radial-gradient(46% 30% at 14% 10%, color-mix(in oklab, var(--ember) 55%, transparent), transparent 72%),
+    radial-gradient(42% 28% at 88% 72%, color-mix(in oklab, #4fe6ff 45%, transparent), transparent 72%);
+  --glow-opacity: 0.72;
+  --glow-motion: neon-flicker 7s ease-in-out infinite;
+}
+
+/* vapor — pink and teal, a grid running to the horizon. */
+.theme-vapor {
+  --paper: #150e22;
+  --paper-deep: #0f091a;
+  --surface: #1f1531;
+  --surface-sunk: #180f27;
+  --ink: #f4ecff;
+  --ink-soft: #f4ecffa3;
+  --muted: #a498c4;
+  --line: #f4ecff1f;
+  --line-strong: #f4ecff3d;
+  --ember: #ff7ad9;
+  --ember-soft: #ff7ad926;
+  --on-ember: #23062a;
+  --shadow-card: 0 1px 2px #00000066, 0 14px 34px -20px #000000b8;
+  --shadow-float: 0 10px 30px -10px #000000c4, 0 30px 70px -30px #000000d6;
+  --type-mix: 32%;
+  --type-lift: 24%;
+  --type-tone: #e8fbff;
+
+  --veil: repeating-linear-gradient(0deg, color-mix(in oklab, #46e8d2 46%, transparent) 0 1.3px, transparent 1.3px 32px);
+  --veil-opacity: 0.46;
+  --veil-loop: 30px;
+  --veil-motion: veil-fall 14s linear infinite;
+  --glow: radial-gradient(46% 34% at 50% 82%, color-mix(in oklab, var(--ember) 60%, transparent), transparent 68%),
+    radial-gradient(70% 40% at 50% 100%, color-mix(in oklab, #ffb457 34%, transparent), transparent 70%);
+  --glow-opacity: 0.66;
+  --glow-motion: breathe 22s ease-in-out infinite;
+}
+
+/* arcade — lime on graphite, with a CRT line sweeping down. */
+.theme-arcade {
+  --paper: #0b0d12;
+  --paper-deep: #07090d;
+  --surface: #14171f;
+  --surface-sunk: #101319;
+  --ink: #eaf6ec;
+  --ink-soft: #eaf6eca3;
+  --muted: #93a397;
+  --line: #eaf6ec1f;
+  --line-strong: #eaf6ec3d;
+  --ember: #7cf76f;
+  --ember-soft: #7cf76f26;
+  --on-ember: #08210a;
+  --shadow-card: 0 1px 2px #00000066, 0 14px 34px -20px #000000b8;
+  --shadow-float: 0 10px 30px -10px #000000c4, 0 30px 70px -30px #000000d6;
+  --type-mix: 30%;
+  --type-lift: 22%;
+  --type-tone: #f2ffe9;
+
+  --veil: repeating-linear-gradient(0deg, color-mix(in oklab, var(--ink) 40%, transparent) 0 1.4px, transparent 1.4px 4px);
+  --veil-opacity: 0.4;
+  --glow: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--ember) 30%, transparent) 45%, transparent);
+  --glow-size: 100% 26%;
+  --glow-opacity: 0.7;
+  --glow-motion: scan 7s linear infinite;
+}
+
+/* tokyo — red and cyan reflected in rain. The rain actually falls. */
+.theme-tokyo {
+  --paper: #0b1017;
+  --paper-deep: #070b10;
+  --surface: #141b24;
+  --surface-sunk: #10161e;
+  --ink: #e9f2f7;
+  --ink-soft: #e9f2f7a3;
+  --muted: #92a3b0;
+  --line: #e9f2f71f;
+  --line-strong: #e9f2f73d;
+  --ember: #ff5f6d;
+  --ember-soft: #ff5f6d26;
+  --on-ember: #24070a;
+  --shadow-card: 0 1px 2px #00000066, 0 14px 34px -20px #000000b8;
+  --shadow-float: 0 10px 30px -10px #000000c4, 0 30px 70px -30px #000000d6;
+  --type-mix: 28%;
+  --type-lift: 24%;
+  --type-tone: #e2f7ff;
+
+  --veil: repeating-linear-gradient(74deg, color-mix(in oklab, var(--ink) 30%, transparent) 0 1.2px, transparent 1.2px 15px);
+  --veil-opacity: 0.4;
+  --veil-loop: 160px;
+  --veil-motion: veil-fall 1.9s linear infinite;
+  --glow: radial-gradient(40% 26% at 12% 88%, color-mix(in oklab, var(--ember) 50%, transparent), transparent 70%),
+    radial-gradient(38% 24% at 86% 94%, color-mix(in oklab, #4fd6ff 44%, transparent), transparent 70%);
+  --glow-opacity: 0.66;
+  --glow-motion: neon-flicker 11s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   MECHANICAL — drawn, machined, assembled.
+   --------------------------------------------------------------------------- */
+
+/* blueprint — cyanotype grid. Nothing moves: technical drawings don't drift. */
+.theme-blueprint {
+  --paper: #0e1622;
+  --paper-deep: #0a111a;
+  --surface: #15202e;
+  --surface-sunk: #111a26;
+  --ink: #dbe8f7;
+  --ink-soft: #dbe8f7a3;
+  --muted: #8b9db3;
+  --line: #dbe8f722;
+  --line-strong: #dbe8f73d;
+  --ember: #6fb2e8;
+  --ember-soft: #6fb2e826;
+  --on-ember: #071420;
+  --shadow-card: 0 1px 2px #00000059, 0 14px 34px -20px #000000ad;
+  --shadow-float: 0 10px 30px -10px #000000b8, 0 30px 70px -30px #000000d1;
+  --type-mix: 24%;
+  --type-lift: 26%;
+  --type-tone: #eaf4ff;
+
+  --motif-mask: var(--mask-ticks);
+  --motif-size: 96px;
+  --motif-color: var(--ember);
+  --motif-opacity: 0.34;
+  --veil: repeating-linear-gradient(0deg, color-mix(in oklab, var(--ember) 34%, transparent) 0 1.2px, transparent 1.2px 26px),
+    repeating-linear-gradient(90deg, color-mix(in oklab, var(--ember) 34%, transparent) 0 1.2px, transparent 1.2px 26px),
+    repeating-linear-gradient(0deg, color-mix(in oklab, var(--ember) 26%, transparent) 0 1.6px, transparent 1.6px 130px),
+    repeating-linear-gradient(90deg, color-mix(in oklab, var(--ember) 26%, transparent) 0 1.6px, transparent 1.6px 130px);
+  --veil-opacity: 0.5;
+}
+
+/* brass — gears behind glass, turning too slowly to notice. */
+.theme-brass {
+  --paper: #17120d;
+  --paper-deep: #110d09;
+  --surface: #211a12;
+  --surface-sunk: #1a140e;
+  --ink: #f3e6d2;
+  --ink-soft: #f3e6d2a3;
+  --muted: #a9977c;
+  --line: #f3e6d21f;
+  --line-strong: #f3e6d236;
+  --ember: #c9974a;
+  --ember-soft: #c9974a26;
+  --on-ember: #1e1405;
+  --shadow-card: 0 1px 2px #0000004d, 0 14px 34px -20px #000000a6;
+  --shadow-float: 0 10px 30px -10px #000000b3, 0 30px 70px -30px #000000cc;
+  --type-mix: 22%;
+  --type-lift: 28%;
+  --type-tone: #fff3dc;
+
+  --motif-mask: var(--mask-gears);
+  --motif-size: 210px;
+  --motif-color: var(--ember);
+  --motif-opacity: 0.2;
+  --motif-motion: drift-slow 240s ease-in-out infinite alternate;
+  --glow: radial-gradient(50% 32% at 20% 88%, color-mix(in oklab, var(--ember) 30%, transparent), transparent 72%);
+  --glow-opacity: 0.6;
+  --glow-motion: breathe 26s ease-in-out infinite;
+}
+
+/* mecha — gunmetal and hazard orange, hex plating, a sensor sweep. */
+.theme-mecha {
+  --paper: #101214;
+  --paper-deep: #0b0d0e;
+  --surface: #191d21;
+  --surface-sunk: #14181b;
+  --ink: #e7ecf0;
+  --ink-soft: #e7ecf0a3;
+  --muted: #94a0a8;
+  --line: #e7ecf01f;
+  --line-strong: #e7ecf03d;
+  --ember: #ff8a3d;
+  --ember-soft: #ff8a3d26;
+  --on-ember: #1e0d02;
+  --shadow-card: 0 1px 2px #00000066, 0 14px 34px -20px #000000b8;
+  --shadow-float: 0 10px 30px -10px #000000c4, 0 30px 70px -30px #000000d6;
+  --type-mix: 26%;
+  --type-lift: 24%;
+  --type-tone: #edf6ff;
+
+  --motif-mask: var(--mask-hex);
+  --motif-size: 56px 96px;
+  --motif-color: var(--ink);
+  --motif-opacity: 0.2;
+  --glow: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--ember) 26%, transparent) 50%, transparent);
+  --glow-size: 100% 18%;
+  --glow-opacity: 0.62;
+  --glow-motion: scan 11s linear infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   COSMIC — the two of you, very small, under a lot of sky.
+   --------------------------------------------------------------------------- */
+
+/* starlight — a clear night. Stars twinkle, the milky band breathes. */
+.theme-starlight {
+  --paper: #0d1018;
+  --paper-deep: #090b12;
+  --surface: #161a24;
+  --surface-sunk: #12151e;
+  --ink: #e7ecf7;
+  --ink-soft: #e7ecf7a3;
+  --muted: #99a3b8;
+  --line: #e7ecf71f;
+  --line-strong: #e7ecf736;
+  --ember: #b9c6ff;
+  --ember-soft: #b9c6ff26;
+  --on-ember: #101528;
+  --shadow-card: 0 1px 2px #00000059, 0 14px 34px -20px #000000ad;
+  --shadow-float: 0 10px 30px -10px #000000b8, 0 30px 70px -30px #000000d1;
+  --type-mix: 20%;
+  --type-lift: 28%;
+  --type-tone: #f0f4ff;
+
+  --motif-mask: var(--mask-stars);
+  --motif-size: 200px;
+  --motif-color: color-mix(in oklab, var(--ember) 60%, white);
+  --motif-opacity: 0.72;
+  --motif-motion: twinkle 8s ease-in-out infinite;
+  --glow: linear-gradient(112deg, transparent 34%, color-mix(in oklab, var(--ember) 20%, transparent) 50%, transparent 66%);
+  --glow-opacity: 0.7;
+  --glow-motion: breathe 44s ease-in-out infinite;
+}
+
+/* aurora — ribbons over the north. They move. */
+.theme-aurora {
+  --paper: #08131a;
+  --paper-deep: #050e14;
+  --surface: #101f27;
+  --surface-sunk: #0c1820;
+  --ink: #e2f4f0;
+  --ink-soft: #e2f4f0a3;
+  --muted: #8fa9a6;
+  --line: #e2f4f01f;
+  --line-strong: #e2f4f036;
+  --ember: #58e0c0;
+  --ember-soft: #58e0c026;
+  --on-ember: #04231c;
+  --shadow-card: 0 1px 2px #00000059, 0 14px 34px -20px #000000ad;
+  --shadow-float: 0 10px 30px -10px #000000b8, 0 30px 70px -30px #000000d1;
+  --type-mix: 26%;
+  --type-lift: 26%;
+  --type-tone: #eafffb;
+
+  --motif-mask: var(--mask-stars);
+  --motif-size: 220px;
+  --motif-color: #ffffff;
+  --motif-opacity: 0.32;
+  --motif-motion: twinkle 13s ease-in-out infinite;
+  --glow: radial-gradient(58% 30% at 24% 6%, color-mix(in oklab, var(--ember) 45%, transparent), transparent 72%),
+    radial-gradient(48% 26% at 72% 14%, color-mix(in oklab, #8f7ce8 40%, transparent), transparent 72%);
+  --glow-opacity: 0.72;
+  --glow-motion: aurora-shift 26s ease-in-out infinite alternate;
+}
+
+/* nebula — violet dust, slowly turning over. */
+.theme-nebula {
+  --paper: #120d1c;
+  --paper-deep: #0d0914;
+  --surface: #1c1528;
+  --surface-sunk: #161022;
+  --ink: #efe8fb;
+  --ink-soft: #efe8fba3;
+  --muted: #a79cbd;
+  --line: #efe8fb1f;
+  --line-strong: #efe8fb36;
+  --ember: #b083f0;
+  --ember-soft: #b083f026;
+  --on-ember: #170a26;
+  --shadow-card: 0 1px 2px #00000059, 0 14px 34px -20px #000000ad;
+  --shadow-float: 0 10px 30px -10px #000000b8, 0 30px 70px -30px #000000d1;
+  --type-mix: 28%;
+  --type-lift: 26%;
+  --type-tone: #f6efff;
+
+  --motif-mask: var(--mask-stars);
+  --motif-size: 190px;
+  --motif-color: #ffffff;
+  --motif-opacity: 0.42;
+  --motif-motion: twinkle 11s ease-in-out infinite;
+  --glow: radial-gradient(54% 38% at 26% 24%, color-mix(in oklab, var(--ember) 46%, transparent), transparent 70%),
+    radial-gradient(46% 32% at 78% 68%, color-mix(in oklab, #4fd6c4 34%, transparent), transparent 70%);
+  --glow-opacity: 0.68;
+  --glow-motion: nebula-drift 40s ease-in-out infinite alternate;
+}
+
+/* ---------------------------------------------------------------------------
+   ELEMENTAL — water and fire.
+   --------------------------------------------------------------------------- */
+
+/* tide — sea glass and coral. The only cool daylight theme; the waves drift. */
+.theme-tide {
+  --paper: #f1f6f6;
+  --paper-deep: #e0eded;
+  --surface: #fbfefe;
+  --surface-sunk: #e9f3f3;
+  --ink: #16262a;
+  --ink-soft: #2f464b89;
+  --muted: #5f7376;
+  --line: #16262a1a;
+  --line-strong: #16262a2e;
+  --ember: #cf6f52;
+  --ember-soft: #cf6f521f;
+  --on-ember: #fff8f5;
+  --shadow-card: 0 1px 2px #16262a0a, 0 12px 32px -18px #16262a33;
+  --shadow-float: 0 8px 24px -8px #16262a38, 0 24px 60px -30px #16262a4a;
+  --type-mix: 16%;
+
+  --motif-mask: var(--mask-waves);
+  --motif-size: 160px 80px;
+  --motif-color: color-mix(in oklab, #2f7d84 70%, var(--ink));
+  --motif-opacity: 0.17;
+  --motif-loop: 160px;
+  --motif-motion: motif-slide 40s linear infinite;
+}
+
+/* ember — a fire that has burned down. Sparks go up. */
+.theme-ember {
+  --paper: #150e0b;
+  --paper-deep: #100a08;
+  --surface: #1f1512;
+  --surface-sunk: #18110e;
+  --ink: #f8e8dc;
+  --ink-soft: #f8e8dca3;
+  --muted: #b39a8c;
+  --line: #f8e8dc1f;
+  --line-strong: #f8e8dc36;
+  --ember: #f0743a;
+  --ember-soft: #f0743a26;
+  --on-ember: #200800;
+  --shadow-card: 0 1px 2px #0000004d, 0 14px 34px -20px #000000a6;
+  --shadow-float: 0 10px 30px -10px #000000b3, 0 30px 70px -30px #000000cc;
+  --type-mix: 24%;
+  --type-lift: 26%;
+  --type-tone: #fff0e2;
+
+  --motif-mask: var(--mask-sparks);
+  --motif-size: 160px;
+  --motif-color: color-mix(in oklab, var(--ember) 70%, #ffd9a0);
+  --motif-opacity: 0.44;
+  --motif-loop: 160px;
+  --motif-motion: motif-rise 24s linear infinite;
+  --glow: radial-gradient(70% 38% at 50% 104%, color-mix(in oklab, var(--ember) 52%, transparent), transparent 72%);
+  --glow-opacity: 0.7;
+  --glow-motion: breathe 14s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Motif masks. Each is a tiny tiled SVG used as a MASK, never as a picture, so
+   the shape is shared and the colour comes from the theme (--motif-color). One
+   heart SVG serves every theme that wants hearts, in that theme's own accent.
+   Shapes are drawn once and repeated with <use>, which keeps the data URI short.
+   --------------------------------------------------------------------------- */
+:root {
+  --mask-hearts: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cdefs%3E%3Cpath id='h' d='M12 21S3 15.6 3 9.9C3 6.6 5.4 4.5 8 4.5c1.7 0 3.1.9 4 2.1.9-1.2 2.3-2.1 4-2.1 2.6 0 5 2.1 5 5.4C21 15.6 12 21 12 21z'/%3E%3C/defs%3E%3Cg fill='%23000'%3E%3Cuse href='%23h' transform='translate(10 14) scale(1.15)'/%3E%3Cuse href='%23h' transform='translate(78 40) scale(0.7) rotate(16)'/%3E%3Cuse href='%23h' transform='translate(44 80) scale(0.85) rotate(-14)'/%3E%3Cuse href='%23h' transform='translate(96 92) scale(0.5) rotate(8)'/%3E%3C/g%3E%3C/svg%3E");
+  --mask-stars: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Cdefs%3E%3Cpath id='s' d='M9 0l1.4 7.6L18 9l-7.6 1.4L9 18l-1.4-7.6L0 9l7.6-1.4z'/%3E%3C/defs%3E%3Cg fill='%23000'%3E%3Cuse href='%23s' transform='translate(20 24) scale(1)'/%3E%3Cuse href='%23s' transform='translate(120 12) scale(0.6)'/%3E%3Cuse href='%23s' transform='translate(74 62) scale(0.8)'/%3E%3Cuse href='%23s' transform='translate(150 84) scale(0.55)'/%3E%3Cuse href='%23s' transform='translate(34 118) scale(0.7)'/%3E%3Cuse href='%23s' transform='translate(104 140) scale(0.95)'/%3E%3Ccircle cx='58' cy='16' r='1.4'/%3E%3Ccircle cx='166' cy='46' r='1.2'/%3E%3Ccircle cx='12' cy='72' r='1.3'/%3E%3Ccircle cx='92' cy='104' r='1.1'/%3E%3Ccircle cx='140' cy='166' r='1.4'/%3E%3Ccircle cx='60' cy='168' r='1.1'/%3E%3C/g%3E%3C/svg%3E");
+  --mask-petals: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 140'%3E%3Cdefs%3E%3Cpath id='p' d='M0 0c9 3 14 10 12 17-2 7-10 10-16 6-6-4-6-16 4-23z'/%3E%3C/defs%3E%3Cg fill='%23000'%3E%3Cuse href='%23p' transform='translate(16 10) rotate(12)'/%3E%3Cuse href='%23p' transform='translate(92 34) rotate(-38) scale(0.8)'/%3E%3Cuse href='%23p' transform='translate(52 72) rotate(64) scale(0.9)'/%3E%3Cuse href='%23p' transform='translate(112 104) rotate(20) scale(0.65)'/%3E%3Cuse href='%23p' transform='translate(20 112) rotate(-70) scale(0.75)'/%3E%3C/g%3E%3C/svg%3E");
+  --mask-leaves: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 150'%3E%3Cdefs%3E%3Cg id='sp' stroke='%23000' stroke-width='1.4' fill='none'%3E%3Cpath d='M0 30C0 14 8 4 22 0'/%3E%3Cpath d='M4 22c6-4 12-3 15 2-4 5-11 5-15-2z' fill='%23000' stroke='none'/%3E%3Cpath d='M9 12c6-4 12-3 15 2-4 5-11 5-15-2z' fill='%23000' stroke='none'/%3E%3Cpath d='M15 4c6-4 12-3 15 2-4 5-11 5-15-2z' fill='%23000' stroke='none'/%3E%3C/g%3E%3C/defs%3E%3Cg%3E%3Cuse href='%23sp' transform='translate(14 16)'/%3E%3Cuse href='%23sp' transform='translate(96 30) rotate(48) scale(0.85)'/%3E%3Cuse href='%23sp' transform='translate(56 88) rotate(-32) scale(0.95)'/%3E%3Cuse href='%23sp' transform='translate(118 106) rotate(140) scale(0.7)'/%3E%3C/g%3E%3C/svg%3E");
+  --mask-blooms: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 130 130'%3E%3Cdefs%3E%3Cg id='fl' fill='%23000'%3E%3Ccircle cx='0' cy='-6' r='3.4'/%3E%3Ccircle cx='5.7' cy='-1.9' r='3.4'/%3E%3Ccircle cx='3.5' cy='4.9' r='3.4'/%3E%3Ccircle cx='-3.5' cy='4.9' r='3.4'/%3E%3Ccircle cx='-5.7' cy='-1.9' r='3.4'/%3E%3Ccircle cx='0' cy='0' r='2' opacity='0.55'/%3E%3C/g%3E%3C/defs%3E%3Cg%3E%3Cuse href='%23fl' transform='translate(22 20) scale(1.1)'/%3E%3Cuse href='%23fl' transform='translate(88 38) scale(0.75) rotate(24)'/%3E%3Cuse href='%23fl' transform='translate(48 76) scale(0.9) rotate(-18)'/%3E%3Cuse href='%23fl' transform='translate(108 96) scale(0.6)'/%3E%3Cuse href='%23fl' transform='translate(16 104) scale(0.8) rotate(40)'/%3E%3C/g%3E%3C/svg%3E");
+  --mask-filigree: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.3'%3E%3Cpath d='M60 6c14 12 14 26 0 34S46 52 60 60s14 22 0 34-14 22 0 20'/%3E%3Cpath d='M60 6C46 18 46 32 60 40s14 12 0 20-14 22 0 34 14 22 0 20'/%3E%3Cpath d='M6 60c12-14 26-14 34 0s6 14 20 0'/%3E%3Cpath d='M114 60c-12-14-26-14-34 0s-6 14-20 0'/%3E%3Ccircle cx='60' cy='60' r='3' fill='%23000' stroke='none'/%3E%3C/g%3E%3C/svg%3E");
+  --mask-gears: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Cdefs%3E%3Cg id='g'%3E%3Ccircle cx='0' cy='0' r='16' fill='none' stroke='%23000' stroke-width='3'/%3E%3Ccircle cx='0' cy='0' r='5' fill='none' stroke='%23000' stroke-width='2.4'/%3E%3Cg fill='%23000'%3E%3Crect x='-2.6' y='-22' width='5.2' height='6'/%3E%3Crect x='-2.6' y='16' width='5.2' height='6'/%3E%3Crect x='-22' y='-2.6' width='6' height='5.2'/%3E%3Crect x='16' y='-2.6' width='6' height='5.2'/%3E%3Crect x='-2.6' y='-22' width='5.2' height='6' transform='rotate(45)'/%3E%3Crect x='-2.6' y='16' width='5.2' height='6' transform='rotate(45)'/%3E%3Crect x='-22' y='-2.6' width='6' height='5.2' transform='rotate(45)'/%3E%3Crect x='16' y='-2.6' width='6' height='5.2' transform='rotate(45)'/%3E%3C/g%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23g' transform='translate(36 40)'/%3E%3Cuse href='%23g' transform='translate(112 96) scale(0.72)'/%3E%3Cuse href='%23g' transform='translate(126 24) scale(0.5)'/%3E%3Cuse href='%23g' transform='translate(24 124) scale(0.6)'/%3E%3C/svg%3E");
+  --mask-waves: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 60'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.6'%3E%3Cpath d='M-10 14c10 0 10-8 20-8s10 8 20 8 10-8 20-8 10 8 20 8 10-8 20-8 10 8 20 8'/%3E%3Cpath d='M-10 34c10 0 10-8 20-8s10 8 20 8 10-8 20-8 10 8 20 8 10-8 20-8 10 8 20 8' opacity='0.7'/%3E%3Cpath d='M-10 54c10 0 10-8 20-8s10 8 20 8 10-8 20-8 10 8 20 8 10-8 20-8 10 8 20 8' opacity='0.45'/%3E%3C/g%3E%3C/svg%3E");
+  --mask-hex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 56 96'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.4'%3E%3Cpath d='M28 2l24 14v28L28 58 4 44V16z'/%3E%3Cpath d='M28 50l24 14v28L28 106 4 92V64z'/%3E%3Cpath d='M-28 50L-4 64v28l-24 14-24-14V64z'/%3E%3C/g%3E%3C/svg%3E");
+  --mask-ticks: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cg stroke='%23000' stroke-width='1.2'%3E%3Cpath d='M48 42v12M42 48h12'/%3E%3Cpath d='M0 42v12M-6 48h12' opacity='0.6'/%3E%3Cpath d='M96 42v12M90 48h12' opacity='0.6'/%3E%3Cpath d='M48 -6v12M42 0h12' opacity='0.6'/%3E%3Cpath d='M48 90v12M42 96h12' opacity='0.6'/%3E%3C/g%3E%3C/svg%3E");
+  --mask-sparks: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 160'%3E%3Cg fill='%23000'%3E%3Ccircle cx='18' cy='24' r='2.2'/%3E%3Ccircle cx='72' cy='12' r='1.4'/%3E%3Ccircle cx='126' cy='36' r='2.6'/%3E%3Ccircle cx='44' cy='58' r='1.8'/%3E%3Ccircle cx='96' cy='74' r='1.2'/%3E%3Ccircle cx='148' cy='92' r='1.9'/%3E%3Ccircle cx='24' cy='104' r='2.4'/%3E%3Ccircle cx='80' cy='122' r='1.5'/%3E%3Ccircle cx='134' cy='142' r='2.1'/%3E%3Ccircle cx='58' cy='150' r='1.3'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 @theme inline {
@@ -208,16 +920,20 @@
 }
 
 @layer base {
+  /* The page ground lives on <html> alone. Painting order is the reason: a
+     negative z-index layer (the atmosphere) sits above the root element's
+     background but below the <body> box's, so an opaque body background would
+     bury every motif in the app. */
   html {
-    background: var(--paper);
+    background:
+      radial-gradient(120% 70% at 50% -10%, color-mix(in oklab, var(--ember) 7%, transparent), transparent 60%),
+      var(--paper);
     -webkit-tap-highlight-color: transparent;
   }
 
   body {
     margin: 0;
-    background:
-      radial-gradient(120% 70% at 50% -10%, color-mix(in oklab, var(--ember) 7%, transparent), transparent 60%),
-      var(--paper);
+    background: transparent;
     color: var(--ink);
     font-family: var(--font-sans);
     font-size: 16px;
@@ -424,6 +1140,169 @@
 .animate-pulse-ring { animation: pulse-ring 1.8s ease-out 3; }
 .animate-heart { animation: heart-beat 1.4s ease-in-out; }
 
+/* ---------------------------------------------------------------------------
+   Atmosphere — the three decorative layers every theme paints behind the app.
+
+   Each theme fills in as much of the contract as it wants and leaves the rest
+   at zero opacity, so "no motif" costs nothing:
+
+     --motif-*  a tiled MASK, painted in --motif-color (hearts, petals, gears)
+     --veil-*   a tiled gradient (grain, hatch, grid, scanlines, rain)
+     --glow-*   one un-tiled gradient (lamplight, aurora, a CRT sweep)
+
+   The layers live behind the content (z-index -1) and never take pointer
+   events, so nothing here can intercept a tap. Motifs are inset past the edges
+   because several of them drift, and a drifting layer must not expose a seam.
+   Note that twinkle/flicker/breathe animate opacity, which means they override
+   the layer's static --*-opacity: that value becomes the peak, not the constant.
+   --------------------------------------------------------------------------- */
+
+.atmos {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* The app-wide instance; theme tiles in the store use the absolute default. */
+.atmos-fixed {
+  position: fixed;
+  z-index: -1;
+}
+
+.atmos > span {
+  position: absolute;
+  inset: -30%;
+  display: block;
+}
+
+.atmos-a {
+  background-color: var(--motif-color, transparent);
+  opacity: var(--motif-opacity, 0);
+  -webkit-mask-image: var(--motif-mask, none);
+  mask-image: var(--motif-mask, none);
+  -webkit-mask-size: var(--motif-size, 140px);
+  mask-size: var(--motif-size, 140px);
+  -webkit-mask-position: 0 0;
+  mask-position: 0 0;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  animation: var(--motif-motion, none);
+}
+
+.atmos-b {
+  background-image: var(--veil, none);
+  background-size: var(--veil-size, auto);
+  background-repeat: repeat;
+  opacity: var(--veil-opacity, 0);
+  animation: var(--veil-motion, none);
+}
+
+.atmos > .atmos-c {
+  inset: 0;
+  background-image: var(--glow, none);
+  background-size: var(--glow-size, cover);
+  background-repeat: no-repeat;
+  opacity: var(--glow-opacity, 0);
+  animation: var(--glow-motion, none);
+}
+
+/* A grid of 27 animating previews would burn a phone's battery for nothing, so
+   tiles hold their cinematic still until you hover or apply one. */
+.theme-tile .atmos > span { animation-play-state: paused; }
+.theme-tile:hover .atmos > span,
+.theme-tile:focus-visible .atmos > span,
+.theme-tile.is-active .atmos > span { animation-play-state: running; }
+
+@keyframes drift-slow {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-3%, -2.5%, 0); }
+}
+@keyframes sway {
+  from { transform: translate3d(0, 0, 0) rotate(-0.5deg); }
+  to { transform: translate3d(1.5%, 1%, 0) rotate(0.5deg); }
+}
+/* Translating the mask by exactly one tile is what makes the loop seamless. */
+@keyframes motif-fall {
+  from { -webkit-mask-position: 0 0; mask-position: 0 0; }
+  to { -webkit-mask-position: 0 var(--motif-loop, 140px); mask-position: 0 var(--motif-loop, 140px); }
+}
+@keyframes motif-rise {
+  from { -webkit-mask-position: 0 var(--motif-loop, 140px); mask-position: 0 var(--motif-loop, 140px); }
+  to { -webkit-mask-position: 0 0; mask-position: 0 0; }
+}
+@keyframes motif-slide {
+  from { -webkit-mask-position: 0 0; mask-position: 0 0; }
+  to { -webkit-mask-position: var(--motif-loop, 140px) 0; mask-position: var(--motif-loop, 140px) 0; }
+}
+@keyframes veil-fall {
+  from { background-position: 0 0; }
+  to { background-position: 0 var(--veil-loop, 120px); }
+}
+@keyframes veil-slide {
+  from { background-position: 0 0; }
+  to { background-position: var(--veil-loop, 120px) 0; }
+}
+@keyframes twinkle {
+  0%, 100% { opacity: calc(var(--motif-opacity, 0.4) * 0.5); }
+  50% { opacity: var(--motif-opacity, 0.4); }
+}
+@keyframes neon-flicker {
+  0%, 100% { opacity: var(--glow-opacity, 0.5); }
+  7% { opacity: calc(var(--glow-opacity, 0.5) * 0.5); }
+  9% { opacity: var(--glow-opacity, 0.5); }
+  11% { opacity: calc(var(--glow-opacity, 0.5) * 0.72); }
+  13% { opacity: var(--glow-opacity, 0.5); }
+  58% { opacity: calc(var(--glow-opacity, 0.5) * 0.85); }
+}
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: calc(var(--glow-opacity, 0.5) * 0.72); }
+  50% { transform: scale(1.06); opacity: var(--glow-opacity, 0.5); }
+}
+@keyframes scan {
+  from { transform: translateY(-40%); }
+  to { transform: translateY(120%); }
+}
+@keyframes aurora-shift {
+  from { transform: translate3d(-4%, 0, 0) skewX(-4deg); }
+  to { transform: translate3d(5%, 2%, 0) skewX(5deg); }
+}
+@keyframes nebula-drift {
+  from { transform: translate3d(-2%, -1%, 0) scale(1); }
+  to { transform: translate3d(3%, 2%, 0) scale(1.08); }
+}
+
+/* Motion added to the app itself, not to the wallpaper. */
+@keyframes rail-draw {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes tile-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.rail {
+  transform-origin: top;
+  animation: rail-draw 1.1s var(--ease-out-soft) both;
+}
+
+/* The story reveals in sequence rather than all at once; the composable sets
+   --reveal-step per row so a group cascades instead of flashing. */
+.reveal.is-visible {
+  animation-delay: calc(var(--reveal-step, 0) * 55ms);
+}
+
+.animate-tile { animation: tile-in 0.4s var(--ease-out-soft) both; }
+
+.lift {
+  transition: transform 0.28s var(--ease-out-soft), box-shadow 0.28s var(--ease-out-soft);
+}
+@media (hover: hover) {
+  .lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -433,4 +1312,8 @@
     transition-duration: 0.001ms !important;
   }
   .reveal { opacity: 1; }
+
+  /* No drifting petals, no rain, no CRT sweep. The themes keep their colours. */
+  .atmos > span { animation: none !important; }
+  .rail { animation: none; }
 }
