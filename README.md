@@ -173,6 +173,9 @@ MinIO is AGPLv3; running it unmodified as part of your own service is fine, but 
 - Uploads are decoded and re-encoded (client mime types are ignored), capped at 8 MB and 10 per
   memory, and stored on a private volume with keys validated against traversal.
 - Every request body, query and route parameter is validated with Zod before a handler sees it.
+- The page CSP is included per nginx location, not declared once at server level. `add_header` is not
+  additive in nginx: a location that sets any header of its own silently drops every inherited one,
+  which is how the document itself can end up as the only response *without* a CSP.
 
 `npm test` covers the ordering guarantees and the isolation ones: a second couple holding real event
 and photo ids gets 404s on read, write, and delete.

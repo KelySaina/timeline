@@ -93,7 +93,7 @@ users ──┬── couple_members ──┬── couples ──┬── eve
 
 | Table | Purpose | Notes |
 | --- | --- | --- |
-| `users` | account | `email` unique (lowercased), `password_hash` (argon2id), `display_name`, `birthday`, `avatar_key`, `token_version` |
+| `users` | account | `email` unique (lowercased), `password_hash` (scrypt, Node core), `display_name`, `birthday`, `avatar_key`, `token_version` |
 | `couples` | the relationship | `title`, `started_on`, `theme`, `created_by` |
 | `couple_members` | membership | PK `(couple_id, user_id)`, `role` owner/partner, `left_at`; partial unique on `user_id WHERE left_at IS NULL` → one active couple per user |
 | `invitations` | join by code | `code` unique (base32, 10 chars), `expires_at`, `accepted_by`, `revoked_at` |
