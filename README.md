@@ -318,10 +318,25 @@ sent nothing. It sends now.
 Push is **optional**: with no `VAPID_*` keys in `.env` the app boots and behaves exactly as before
 and the switch is replaced by a line saying so. To turn it on:
 
+Locally:
+
 ```bash
 ./scripts/vapid-keys.sh --write     # or just re-run ./setup.sh, which generates a pair
 docker compose up -d --force-recreate api
 ```
+
+On the deployed host, recreate against the image CI pushed rather than rebuilding from source:
+
+```bash
+cd ~/timeline
+./scripts/vapid-keys.sh --write --subject=mailto:you@your-domain
+IMAGE_TAG=$(cat .deployed_tag) docker compose \
+  -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.deploy.yml \
+  up -d --force-recreate api
+```
+
+The next deploy carries the keys forward on its own: `.env` is gitignored, so the box keeps its own,
+and `setup.sh` preserves whatever is already there.
 
 Rotating the pair signs every device out of notifications — a browser binds its subscription to the
 key it was created with — so `setup.sh --rotate` deliberately leaves these alone.

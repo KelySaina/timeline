@@ -67,8 +67,16 @@ if [ "$WRITE" -eq 1 ]; then
     printf '\n# --- notifications (web push) ---\nVAPID_PUBLIC_KEY=%s\nVAPID_PRIVATE_KEY=%s\nVAPID_SUBJECT=%s\n' \
       "$PUBLIC" "$PRIVATE" "$SUBJECT" >> .env
   fi
-  echo "Written to .env. Restart the api for it to take effect:"
-  echo "  docker compose up -d --force-recreate api"
+  echo "Written to .env. The api has to be recreated to pick them up."
+  if [ -f .deployed_tag ]; then
+    # A deployed host runs the image CI pushed, not a local build. Recreating without the deploy
+    # overlay would quietly rebuild the api from source on this box.
+    echo "  IMAGE_TAG=\$(cat .deployed_tag) docker compose \\"
+    echo "    -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.deploy.yml \\"
+    echo "    up -d --force-recreate api"
+  else
+    echo "  docker compose up -d --force-recreate api"
+  fi
 else
   printf 'VAPID_PUBLIC_KEY=%s\nVAPID_PRIVATE_KEY=%s\nVAPID_SUBJECT=%s\n' "$PUBLIC" "$PRIVATE" "$SUBJECT"
 fi
