@@ -23,10 +23,14 @@ const excerpt = computed(() => props.event.description?.replace(/\s+/g, ' ').tri
     <div class="flex items-start gap-3 px-4 pt-4 sm:px-5 sm:pt-5">
       <DateBadge :date="event.eventDate" :precision="event.datePrecision" />
       <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <FaIcon :icon="meta.icon" class="text-[0.7rem]" :style="{ color: meta.color }" />
+        <!--
+          Wraps as a unit: in a narrow column (the heartline's gutter costs ~50px) an unwrapped row
+          broke the date mid-string and left the separator orphaned on a line of its own.
+        -->
+        <div class="flex flex-wrap items-center gap-x-2">
+          <FaIcon :icon="meta.icon" class="shrink-0 text-[0.7rem]" :style="{ color: meta.color }" />
           <span class="eyebrow" :style="{ color: meta.color }">{{ meta.label }}</span>
-          <span class="text-[0.7rem] text-muted">· {{ dateLabel }}</span>
+          <span class="whitespace-nowrap text-[0.7rem] text-muted">{{ dateLabel }}</span>
         </div>
         <h3 class="display mt-1 text-[1.2rem] leading-snug text-ink sm:text-[1.32rem]">
           {{ event.title }}

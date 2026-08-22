@@ -39,6 +39,10 @@ export const THEME_NAMES = [
 ] as const;
 export type Theme = (typeof THEME_NAMES)[number];
 
+/** How the story is drawn. Mirrors apps/api/src/modules/couples/storyLayouts.ts. */
+export const STORY_LAYOUTS = ['rail', 'road', 'route', 'album', 'reel', 'heartline'] as const;
+export type StoryLayout = (typeof STORY_LAYOUTS)[number];
+
 export type EventPhoto = { id: string; width: number; height: number; position: number };
 
 export type TimelineEvent = {
@@ -94,6 +98,7 @@ export type Couple = {
   title: string | null;
   startedOn: string | null;
   theme: Theme;
+  storyLayout: StoryLayout;
   role: 'owner' | 'partner';
   members: Member[];
   together: Elapsed | null;

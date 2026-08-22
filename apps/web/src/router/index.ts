@@ -17,6 +17,8 @@ const router = createRouter({
     },
     { path: '/upcoming', name: 'upcoming', component: () => import('@/views/UpcomingView.vue'), meta: { auth: true, couple: true } },
     { path: '/search', name: 'search', component: () => import('@/views/SearchView.vue'), meta: { auth: true, couple: true } },
+    { path: '/story', name: 'story', component: () => import('@/views/StoryView.vue'), meta: { auth: true, couple: true } },
+    { path: '/themes', name: 'themes', component: () => import('@/views/ThemesView.vue'), meta: { auth: true, couple: true } },
     { path: '/us', name: 'profile', component: () => import('@/views/ProfileView.vue'), meta: { auth: true, couple: true } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],

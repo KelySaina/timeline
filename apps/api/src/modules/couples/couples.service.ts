@@ -20,6 +20,7 @@ export type CoupleSnapshot = {
   title: string | null;
   startedOn: string | null;
   theme: string;
+  storyLayout: string;
   role: 'owner' | 'partner';
   members: Member[];
   together: ReturnType<typeof elapsed> | null;
@@ -102,7 +103,7 @@ export async function createCouple(
 
 export async function updateCouple(
   coupleId: string,
-  patch: { title?: string | null; startedOn?: string | null; theme?: string },
+  patch: { title?: string | null; startedOn?: string | null; theme?: string; storyLayout?: string },
 ): Promise<void> {
   await transaction(async (client) => {
     await client.query(
@@ -110,6 +111,7 @@ export async function updateCouple(
           set title      = case when $2::boolean then $3::text else title end,
               started_on = case when $4::boolean then $5::date else started_on end,
               theme      = coalesce($6, theme),
+              story_layout = coalesce($7, story_layout),
               updated_at = now()
         where id = $1`,
       [
@@ -119,6 +121,7 @@ export async function updateCouple(
         patch.startedOn !== undefined,
         patch.startedOn ?? null,
         patch.theme ?? null,
+        patch.storyLayout ?? null,
       ],
     );
     await syncDerivedRecurring(client, coupleId);
@@ -141,9 +144,10 @@ export async function getCoupleSnapshot(userId: string): Promise<CoupleSnapshot 
     title: string | null;
     started_on: string | null;
     theme: string;
+    story_layout: string;
     role: 'owner' | 'partner';
   }>(
-    `select c.id, c.title, c.started_on, c.theme, m.role
+    `select c.id, c.title, c.started_on, c.theme, c.story_layout, m.role
        from couple_members m join couples c on c.id = m.couple_id
       where m.user_id = $1 and m.left_at is null`,
     [userId],
@@ -189,6 +193,7 @@ export async function getCoupleSnapshot(userId: string): Promise<CoupleSnapshot 
     title: couple.title,
     startedOn: couple.started_on,
     theme: couple.theme,
+    storyLayout: couple.story_layout,
     role: couple.role,
     members: members.map((m) => ({
       id: m.id,

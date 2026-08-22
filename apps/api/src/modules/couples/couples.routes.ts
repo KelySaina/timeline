@@ -7,6 +7,7 @@ import { valid, validate } from '../../middleware/validate.js';
 import { publish } from '../realtime/bus.js';
 import { clientOf, notify } from '../realtime/notify.js';
 import * as service from './couples.service.js';
+import { STORY_LAYOUTS } from './storyLayouts.js';
 import { THEMES } from './themes.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a YYYY-MM-DD date');
@@ -21,6 +22,7 @@ const updateSchema = z
     title: z.string().trim().max(80).nullable().optional(),
     startedOn: isoDate.nullable().optional(),
     theme: z.enum(THEMES).optional(),
+    storyLayout: z.enum(STORY_LAYOUTS).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
 

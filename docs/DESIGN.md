@@ -94,7 +94,7 @@ users ──┬── couple_members ──┬── couples ──┬── eve
 | Table | Purpose | Notes |
 | --- | --- | --- |
 | `users` | account | `email` unique (lowercased), `password_hash` (scrypt, Node core), `display_name`, `birthday`, `avatar_key`, `token_version` |
-| `couples` | the relationship | `title`, `started_on`, `theme`, `created_by` |
+| `couples` | the relationship | `title`, `started_on`, `theme`, `story_layout`, `created_by` |
 | `couple_members` | membership | PK `(couple_id, user_id)`, `role` owner/partner, `left_at`; partial unique on `user_id WHERE left_at IS NULL` → one active couple per user |
 | `invitations` | join by code | `code` unique (base32, 10 chars), `expires_at`, `accepted_by`, `revoked_at` |
 | `events` | the story | `couple_id`, `event_date`, `end_date`, `date_precision` (day/month/year), `type`, `title`, `description`, `location`, `mood`, `created_by`, `created_at`, `updated_at`, `deleted_at` |
@@ -203,6 +203,14 @@ goes through `api/client.ts`, so auth, CSRF, and error normalisation exist in ex
   never ends by itself, so the streams are closed first — otherwise deploys stall until SIGKILL.
 - **A stale shell after a deploy.** The worker never serves `index.html` from cache first, and the
   dev server never registers a worker at all.
+- **A layout whose data is empty.** The route map with no locations and the heartline with no moods
+  both still draw something honest, and the gallery warns before you pick rather than after.
+- **A year holding one memory in the album.** Falls back to a single full-width block instead of one
+  lonely box in a field of white.
+- **The album closing its own gaps.** Never with `grid-auto-flow: dense` — it reorders, and
+  chronology is the product. A lone half-width block is widened instead.
+- **An unknown layout value.** `storyLayoutMeta()` falls back to the rail rather than rendering
+  nothing, so a couple on a newer build than the SPA still sees their story.
 
 ### Is an object store more secure than a Docker volume?
 
@@ -233,6 +241,10 @@ of root credentials.
 | Server-side thumbnails (sharp, webp) | Timeline stays fast on mobile data | Video posters reuse the pipeline |
 | Soft delete + `created_by` on events | Enables "on this day", recaps, and undo later | — |
 | Vue SPA + Pinia, no SSR | Private app, nothing to index, simplest deploy | PWA/offline is additive |
+| Story layout is a column on `couples`, like `theme` | The shape belongs to the relationship, not the device, and rides the existing change stream | Adding a layout is one migration editing one check constraint |
+| `text` + check constraint, not a Postgres enum | `ALTER TYPE` cannot be rolled back inside a transaction; a check can | Same pattern as `theme` |
+| Layouts derive their shape from existing columns | No new writing burden on the couple: the gap between dates, a location, a photo count and a mood are already there | A layout needing new data would need a new field first |
+| One SVG segment per memory, not one path per year | A single path needs measured card heights and tears on reflow; a stretched per-row segment cannot | — |
 | Docker Compose (db + api + web) | One command to run the whole stack | Same images deploy to a real host |
 | Live updates over SSE, not WebSocket | Traffic is one-directional, rides the session cookie, needs no upgrade through nginx/Traefik, browser owns the reconnect | Bidirectional features (typing, presence) would need the upgrade |
 | The stream carries a nudge, not content | Every update is re-read through the normal endpoint, so the couple check stays on the read path and a stream cannot leak what an endpoint would refuse | Payloads could carry rows later; the authz cost is the reason not to |

@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { api, clientId } from '@/api/client';
-import type { Couple, InvitePreview, Invitation, Theme, User } from '@/api/types';
+import type { Couple, InvitePreview, Invitation, StoryLayout, Theme, User } from '@/api/types';
 import { THEMES, themeMeta } from '@/lib/themes';
 
 export const useAuthStore = defineStore('auth', () => {
@@ -95,12 +95,17 @@ export const useAuthStore = defineStore('auth', () => {
     title?: string | null;
     startedOn?: string | null;
     theme?: Theme;
+    storyLayout?: StoryLayout;
   }): Promise<void> {
-    // Optimistic for theme changes only: a colour swap that waits for a round trip feels broken,
-    // and the worst case is the server refusing and applyTheme() putting the old one back.
+    // Optimistic for the two purely visual choices: a colour swap or a relayout that waits for a
+    // round trip feels broken, and the worst case is the server refusing and the next snapshot
+    // putting the old one back.
     if (patch.theme && couple.value) {
       couple.value = { ...couple.value, theme: patch.theme };
       applyTheme();
+    }
+    if (patch.storyLayout && couple.value) {
+      couple.value = { ...couple.value, storyLayout: patch.storyLayout };
     }
     const payload = await api.patch<{ couple: Couple }>('/couples/me', patch);
     couple.value = payload.couple;

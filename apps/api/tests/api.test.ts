@@ -14,6 +14,7 @@ import { pool } from '../src/db/pool.js';
 import { migrate } from '../src/db/migrate.js';
 import { initStorage, storageName } from '../src/modules/photos/storage/index.js';
 import { startRealtime, stopRealtime } from '../src/modules/realtime/bus.js';
+import { STORY_LAYOUTS } from '../src/modules/couples/storyLayouts.js';
 import { THEMES } from '../src/modules/couples/themes.js';
 
 let server: Server;
@@ -161,6 +162,39 @@ describe('auth + couple lifecycle', () => {
 
     const bogus = await call(user, 'PATCH', '/api/couples/me', { theme: 'chartreuse' });
     assert.equal(bogus.status, 400);
+  });
+
+  it('accepts every shipped story layout, defaults to the rail, and rejects anything else', async () => {
+    const user = await signup('Layouts');
+    const created = await call(user, 'POST', '/api/couples', {});
+
+    // Every existing couple was reading the rail before this column existed, so that is the only
+    // safe default — a migration that silently relayouts someone's story is not a migration.
+    assert.equal(created.body.couple.storyLayout, 'rail');
+
+    // Walks the shipped list, so adding a layout to the SPA without letting the API accept it
+    // fails here rather than as a 400 the reader sees.
+    assert.equal(STORY_LAYOUTS.length, 6, `expected six layouts, got ${STORY_LAYOUTS.length}`);
+    for (const storyLayout of STORY_LAYOUTS) {
+      const result = await call(user, 'PATCH', '/api/couples/me', { storyLayout });
+      assert.equal(result.status, 200, storyLayout);
+      assert.equal(result.body.couple.storyLayout, storyLayout);
+    }
+
+    // The check constraint in 002 and this list have to agree; if they drift, the validator lets
+    // something through and Postgres answers with a 500 instead of a 400.
+    const bogus = await call(user, 'PATCH', '/api/couples/me', { storyLayout: 'spiral' });
+    assert.equal(bogus.status, 400);
+
+    // The shape and the colour are independent choices on the same relationship.
+    const both = await call(user, 'PATCH', '/api/couples/me', { storyLayout: 'album', theme: 'midnight' });
+    assert.equal(both.status, 200);
+    assert.equal(both.body.couple.storyLayout, 'album');
+    assert.equal(both.body.couple.theme, 'midnight');
+
+    // And it survives a fresh read, not just the write's own response.
+    const reread = await call(user, 'GET', '/api/couples/me');
+    assert.equal(reread.body.couple.storyLayout, 'album');
   });
 
   it('rejects state-changing requests without the CSRF header', async () => {

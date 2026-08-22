@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useTimelineStore } from '@/stores/timeline';
 import { useUiStore } from '@/stores/ui';
-import type { Theme } from '@/api/types';
 import { themeMeta } from '@/lib/themes';
-import { useToastStore } from '@/stores/toast';
-import AppSheet from './ui/AppSheet.vue';
 import Avatar from './ui/Avatar.vue';
 import EventForm from './EventForm.vue';
+import InstallButton from './InstallButton.vue';
 import MemoryModal from './MemoryModal.vue';
-import ThemeStore from './ThemeStore.vue';
 
 const auth = useAuthStore();
 const timeline = useTimelineStore();
@@ -26,21 +23,7 @@ const tabs = computed(() => [
   { name: 'profile', label: 'Us', icon: 'user' },
 ]);
 
-const toasts = useToastStore();
-const themeOpen = ref(false);
-const savingTheme = ref(false);
 const currentTheme = computed(() => themeMeta(auth.couple?.theme));
-
-async function setTheme(theme: Theme): Promise<void> {
-  savingTheme.value = true;
-  try {
-    await auth.updateCouple({ theme });
-  } catch {
-    toasts.error('Could not save that theme');
-  } finally {
-    savingTheme.value = false;
-  }
-}
 
 const title = computed(() => auth.couple?.title || auth.displayNames.join(' & ') || 'Our story');
 
@@ -71,15 +54,16 @@ function onSaved(): void {
 
       <span class="flex-1" />
 
-      <button
-        class="btn btn-quiet h-9 w-9 rounded-full p-0"
-        aria-label="Change theme"
+      <InstallButton />
+      <RouterLink
+        :to="{ name: 'themes' }"
+        class="btn btn-quiet h-9 w-9 shrink-0 rounded-full p-0"
+        aria-label="Theme store"
         :title="`Theme: ${currentTheme.label}`"
-        @click="themeOpen = true"
       >
         <FaIcon icon="palette" />
-      </button>
-      <button class="btn btn-primary hidden h-9 px-3.5 sm:inline-flex" @click="ui.compose()">
+      </RouterLink>
+      <button class="btn btn-primary hidden h-9 shrink-0 px-3.5 sm:inline-flex" @click="ui.compose()">
         <FaIcon icon="plus" />
         <span class="text-[0.875rem]">Add memory</span>
       </button>
@@ -140,20 +124,5 @@ function onSaved(): void {
       @saved="onSaved"
     />
     <MemoryModal :event="ui.viewing" @close="ui.view(null)" @edit="ui.edit($event)" />
-
-    <AppSheet
-      :open="themeOpen"
-      title="Theme store"
-      :subtitle="`Wearing ${currentTheme.label} — ${currentTheme.blurb.toLowerCase()}`"
-      size="lg"
-      @close="themeOpen = false"
-    >
-      <ThemeStore
-        :model-value="auth.couple?.theme ?? 'dawn'"
-        :busy="savingTheme"
-        :hero="false"
-        @update:model-value="setTheme"
-      />
-    </AppSheet>
   </div>
 </template>

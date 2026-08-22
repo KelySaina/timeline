@@ -144,6 +144,53 @@ What keeps MinIO from being *worse* than the volume it replaced (`infra/minio/bo
 
 MinIO is AGPLv3; running it unmodified as part of your own service is fine, but worth knowing.
 
+## How the story is drawn
+
+`couples.story_layout` sits beside `couples.theme` and works identically: it belongs to the
+relationship rather than the device, it is validated against a shipped list at the edge, and a change
+reaches the other partner over the change stream without a refresh. Existing couples default to
+`rail`, which is what they have been reading all along — a migration that silently relayouts
+someone's story is not a migration.
+
+`Timeline.vue` is only a dispatcher. It owns the scroll reveal, the infinite-scroll sentinel and the
+end-of-story line; each layout under `components/stories/` renders years and memories and nothing
+else, so a new one cannot break paging and swapping between them cannot lose your place.
+
+Two of the six take their shape from data that is optional, and the gallery says so on the tile
+rather than letting you find out afterwards: the route map needs `location`, the heartline needs
+`mood`. Both draw something reasonable without them — a plain trunk line, a mid-scale pulse — but
+they get better the longer the app is used.
+
+What the shapes are derived from, all of it already in the schema:
+
+| Layout | Shape comes from |
+| --- | --- |
+| `rail` | Nothing but the order — every memory the same size |
+| `road` | The gap between one memory and the next, as a bend |
+| `route` | `location`, as a station; `end_date`, as a spur |
+| `album` | Photo count and how much was written, as block size |
+| `reel` | Nothing new — the year grouping, turned sideways |
+| `heartline` | `mood` and event type, as lateral deflection |
+
+Two implementation notes worth keeping, because both were arrived at the hard way:
+
+- **The road draws between the cards, not beside them.** A curve in a side gutter is the obvious
+  build and it fails on a phone: 390px spares about 30px of gutter, and 30px of curve is a straight
+  line with a kink in it — the road ends up reading as a worse rail. It sweeps across a full-width
+  band in the gap under each memory instead.
+- **The heartline needs the opposite.** A cardiogram is mostly flat with sharp blips, so a horizontal
+  band turns every beat into a shallow diagonal that reads as a step. It keeps the narrow gutter that
+  ruins the road, because an EKG needs almost no amplitude to be legible.
+
+Both draw one SVG segment per memory, stretched with `preserveAspectRatio="none"`, entering where the
+previous one left. A single path spanning the year would need measured card heights and would tear on
+every reflow; this way the line is continuous whatever height a card turns out to be.
+
+The album is the one layout that reorders nothing on purpose: `grid-auto-flow: dense` would close its
+gaps for free and is the wrong tool, because it backfills holes with whatever fits and silently
+breaks chronology. A lone half-width block is widened instead — the fix belongs in the sizing, not
+the packing.
+
 ## Live updates
 
 `GET /api/stream` is a server-sent event stream, opened once per tab for as long as a couple is
@@ -208,6 +255,12 @@ sitting in a cache that survives sign-out. Offline gets you the shell and a fail
   photos, profiles and upcoming dates.
 - **Installable** — a real home-screen app: standalone window, themed status bar, an "Add a memory"
   shortcut, and a shell that opens offline instead of a browser error page.
+- **Six ways to read it** — the story itself is drawn six ways, picked from a gallery like the
+  themes are: the original **rail**, a **winding road** whose bends tighten where memories cluster,
+  a **route map** where places become stations and trips become spurs, an **album** laying each year
+  out as a scrapbook page with block size following the weight of the memory, a **reel** you swipe
+  sideways through a year, and a **heartline** that leans out at whatever moved you. The shape
+  belongs to the relationship, so picking one changes both screens at once.
 - **A theme store** — 27 themes in 8 collections (daylight, evening, flowery, antique, neon,
   mechanical, cosmic, elemental), browsed from live preview tiles on the *Us* screen. Every colour
   in the app, including the nine event-type accents, comes from the theme's token set, and the
