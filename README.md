@@ -332,8 +332,12 @@ cd ~/timeline
 ./scripts/vapid-keys.sh --write --subject=mailto:you@your-domain
 IMAGE_TAG=$(cat .deployed_tag) docker compose \
   -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.deploy.yml \
-  up -d --force-recreate api
+  up -d --force-recreate --pull never api
 ```
+
+`--pull never` because the image is already on the box from the deploy, and the GHCR credential only
+lives for the duration of the CI job — without it `pull_policy: always` reports a registry `denied`
+and then falls back to the local image regardless.
 
 The next deploy carries the keys forward on its own: `.env` is gitignored, so the box keeps its own,
 and `setup.sh` preserves whatever is already there.

@@ -71,9 +71,12 @@ if [ "$WRITE" -eq 1 ]; then
   if [ -f .deployed_tag ]; then
     # A deployed host runs the image CI pushed, not a local build. Recreating without the deploy
     # overlay would quietly rebuild the api from source on this box.
+    # --pull never on purpose: the image is already on this box from the deploy, and the GHCR
+    # credential only exists inside the CI job — so pull_policy: always would fail with a
+    # registry "denied" and then quietly fall back to the local image anyway.
     echo "  IMAGE_TAG=\$(cat .deployed_tag) docker compose \\"
     echo "    -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.deploy.yml \\"
-    echo "    up -d --force-recreate api"
+    echo "    up -d --force-recreate --pull never api"
   else
     echo "  docker compose up -d --force-recreate api"
   fi
