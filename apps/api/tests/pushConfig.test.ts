@@ -31,7 +31,7 @@ process.env.VAPID_SUBJECT = 'mailto:me@example.com';
 const { createApp } = await import('../src/app.js');
 const { pool } = await import('../src/db/pool.js');
 const { migrate } = await import('../src/db/migrate.js');
-const { pushConfigured } = await import('../src/config/env.js');
+const { pushConfigured, usableSubject } = await import('../src/config/env.js');
 
 let server: Server;
 let base = '';
@@ -69,6 +69,36 @@ before(async () => {
 after(async () => {
   server?.close();
   await pool.end();
+});
+
+describe('what counts as a usable contact address', () => {
+  it('accepts an address that could reach someone and rejects the ones that cannot', () => {
+    for (const good of [
+      'mailto:someone@gmail.com',
+      'mailto:first.last+tag@sub.domain.co.uk',
+      'https://timeline.example-real-host.dev/contact',
+    ]) {
+      assert.equal(usableSubject(good), true, good);
+    }
+
+    for (const bad of [
+      '',
+      'YOUR_REAL_EMAIL',
+      'mailto:YOUR_REAL_EMAIL',
+      // Well-formed and unreachable, which is the dangerous shape: RFC 2606 reserves these for
+      // documentation, so they are precisely what gets copied out of documentation.
+      'mailto:me@example.com',
+      'mailto:admin@example.org',
+      'mailto:admin@localhost',
+      'mailto:you@your-domain',
+      // No TLD at all.
+      'mailto:admin@intranet',
+      // http, not https: a push service will not use it.
+      'http://example-real-host.dev/contact',
+    ]) {
+      assert.equal(usableSubject(bad), false, bad);
+    }
+  });
 });
 
 describe('push with an unusable subject', () => {

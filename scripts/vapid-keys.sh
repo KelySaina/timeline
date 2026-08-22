@@ -18,7 +18,10 @@
 # ============================================================================
 set -euo pipefail
 
-SUBJECT="${VAPID_SUBJECT:-mailto:admin@example.com}"
+# No default, deliberately. There is no address this script could invent that a push service could
+# actually reach, and the last attempt shipped 'mailto:admin@example.com' — which its own check below
+# now rejects. Writing requires --subject; printing does not, so the keys are still easy to look at.
+SUBJECT="${VAPID_SUBJECT:-}"
 WRITE=0
 ROTATE=0
 for arg in "$@"; do
@@ -34,7 +37,14 @@ done
 # The subject is sent to the push service on every request, and a malformed one is rejected there
 # rather than here — so it is checked before anything is written. Catches a placeholder pasted in
 # whole, which is the way this actually goes wrong.
-case "$SUBJECT" in
+if [ "$WRITE" -eq 1 ] && [ -z "$SUBJECT" ]; then
+  echo "--subject is required when writing to .env." >&2
+  echo "  ./scripts/vapid-keys.sh --write --subject=mailto:you@your-real-domain" >&2
+  echo "It is the address the push service contacts about this deployment, so it has to reach you." >&2
+  exit 2
+fi
+
+case "${SUBJECT:-mailto:placeholder@example.com}" in
   mailto:*@*.*|https://*.*) ;;
   *) echo "VAPID_SUBJECT '$SUBJECT' is not a usable contact URI." >&2
      echo "It has to be an address that can receive mail, or an https:// URL." >&2
@@ -113,5 +123,10 @@ if [ "$WRITE" -eq 1 ]; then
     echo "  docker compose up -d --force-recreate api"
   fi
 else
-  printf 'VAPID_PUBLIC_KEY=%s\nVAPID_PRIVATE_KEY=%s\nVAPID_SUBJECT=%s\n' "$PUBLIC" "$PRIVATE" "$SUBJECT"
+  printf 'VAPID_PUBLIC_KEY=%s\nVAPID_PRIVATE_KEY=%s\n' "$PUBLIC" "$PRIVATE"
+  if [ -n "$SUBJECT" ]; then
+    printf 'VAPID_SUBJECT=%s\n' "$SUBJECT"
+  else
+    printf 'VAPID_SUBJECT=          # an address that reaches you, e.g. mailto:you@example.org\n'
+  fi
 fi

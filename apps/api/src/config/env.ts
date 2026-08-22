@@ -32,17 +32,6 @@ const schema = z.object({
   // Who a push service should contact about this application. mailto: or https:.
   VAPID_SUBJECT: z.string().optional(),
 }).superRefine((value, ctx) => {
-  // Push is all three keys or none of them. Half-configured is almost always a typo, and silently
-  // disabling notifications because one line is misspelled is the wrong failure.
-  const vapid = ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT'] as const;
-  if (vapid.some((key) => value[key])) {
-    for (const key of vapid) {
-      if (!value[key]) {
-        ctx.addIssue({ code: 'custom', path: [key], message: `${key} is required when any VAPID_* key is set` });
-      }
-    }
-  }
-
   if (value.STORAGE_DRIVER !== 's3') return;
   for (const key of ['S3_ENDPOINT', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
     if (!value[key]) {
@@ -74,7 +63,7 @@ export const isProd = env.NODE_ENV === 'production';
 const RESERVED_DOMAINS =
   /(^|[@.])(example\.(com|net|org|edu)|your-domain|localhost)$|\.(example|invalid|test|localhost)$/i;
 
-const usableSubject = (value: string): boolean => {
+export const usableSubject = (value: string): boolean => {
   const shapedRight =
     /^mailto:[^\s@]+@[^\s@.]+\.[^\s@.]+/.test(value) || /^https:\/\/[^\s]+\.[^\s]+/.test(value);
   if (!shapedRight) return false;
@@ -82,24 +71,43 @@ const usableSubject = (value: string): boolean => {
   return !RESERVED_DOMAINS.test(host);
 };
 
-const hasKeys = Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
+/**
+ * Whether this deployment can send push at all, and if not, why.
+ *
+ * Nothing here is ever fatal. Push is one screen's worth of an app that does plenty without it, so
+ * every degree of misconfiguration — no keys, half the keys, an unreachable contact address — leaves
+ * the API running with notifications off and the reason in the log. An earlier version treated a
+ * half-configured pair as a startup error on the grounds that it is probably a typo, which is true
+ * and beside the point: the cost of being right that way is the whole site.
+ */
+function describePush(): { ok: boolean; reason: string | null } {
+  const { VAPID_PUBLIC_KEY: pub, VAPID_PRIVATE_KEY: key, VAPID_SUBJECT: subject } = env;
+  if (!pub && !key && !subject) return { ok: false, reason: null }; // Simply not set up. Not a fault.
+
+  const missing = (['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT'] as const).filter(
+    (name) => !env[name],
+  );
+  if (missing.length) {
+    return { ok: false, reason: `${missing.join(' and ')} missing — all three are needed together` };
+  }
+  if (!usableSubject(subject!)) {
+    return {
+      ok: false,
+      reason:
+        `VAPID_SUBJECT (${subject}) is not a contact address anyone could reach. It has to be a ` +
+        'real mailto: address or an https:// URL — a reserved documentation domain does not count, ' +
+        'because a push service accepts it and then has nowhere to write to.',
+    };
+  }
+  return { ok: true, reason: null };
+}
+
+const push = describePush();
 
 /**
- * Whether this deployment can send push at all. Everything push-related checks this rather than
- * the keys: an install whose .env has no VAPID pair is a normal, supported state — the endpoints
- * say so honestly and the SPA hides the affordance — not a broken one.
- *
- * A bad subject lands in that same state rather than stopping the process. Refusing to boot would
- * trade every screen of the app for a feature nobody has switched on yet, so the API says loudly
- * what is wrong and carries on without notifications.
+ * Everything push-related checks this rather than the keys, so an install without them is a normal,
+ * supported state: the endpoints say so honestly and the SPA replaces the switch with a sentence.
  */
-export const pushConfigured = hasKeys && usableSubject(env.VAPID_SUBJECT!);
+export const pushConfigured = push.ok;
 
-if (hasKeys && !pushConfigured) {
-  console.error(
-    `[config] VAPID_SUBJECT is not a usable contact URI (${env.VAPID_SUBJECT}) — notifications are ` +
-      'disabled until it is an address that can actually receive mail, or an https:// URL. A ' +
-      'reserved documentation domain counts as unusable: a push service would accept it and then ' +
-      'have no way to reach you.',
-  );
-}
+if (push.reason) console.error(`[config] notifications are off: ${push.reason}`);

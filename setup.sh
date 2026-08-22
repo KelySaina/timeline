@@ -301,9 +301,13 @@ VAPID_SUBJECT="$(read_env_value VAPID_SUBJECT)"
 if [ -z "$VAPID_PUBLIC_KEY" ] || [ -z "$VAPID_PRIVATE_KEY" ]; then
   gen_vapid
 fi
-if [ -z "$VAPID_SUBJECT" ] && [ -n "$VAPID_PUBLIC_KEY" ]; then
-  # Who a push service should contact about this deployment; never shown to anyone using the app.
-  VAPID_SUBJECT="mailto:admin@${DOMAIN:-localhost}"
+if [ -z "$VAPID_SUBJECT" ] && [ -n "$VAPID_PUBLIC_KEY" ] && [ -n "$DOMAIN" ]; then
+  # Who a push service contacts about this deployment. Derived from the domain only when there is a
+  # real one — 'admin@localhost' is not an address, and inventing one produced keys that looked
+  # configured while notifications stayed off. With this empty the API boots and says so.
+  case "$DOMAIN" in
+    *.*) VAPID_SUBJECT="mailto:admin@$DOMAIN" ;;
+  esac
 fi
 
 for key in POSTGRES_PASSWORD SESSION_SECRET MINIO_ROOT_PASSWORD S3_SECRET_ACCESS_KEY; do
@@ -378,8 +382,10 @@ S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
 S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
 
 # --- notifications (web push) ---
-# Optional: with these empty the app runs as before and hides the notifications switch. Replacing
-# them signs every device out of notifications, so they are preserved across runs and never rotated.
+# Optional: without a usable set the app runs as before and says so instead of offering a switch.
+# The keys are preserved across runs and never rotated — a browser binds its subscription to the
+# public key, so replacing it signs every device out. VAPID_SUBJECT has to be an address that can
+# actually reach whoever runs this; set it by hand if it is empty below.
 VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY
 VAPID_PRIVATE_KEY=$VAPID_PRIVATE_KEY
 VAPID_SUBJECT=$VAPID_SUBJECT

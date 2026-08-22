@@ -111,7 +111,7 @@ async function test(): Promise<void> {
             Notifications work in the installed app and on the deployed site.
           </template>
           <template v-else-if="state === 'unconfigured'">
-            This server has no notification keys set up, so there is nothing to switch on yet.
+            Notifications are not set up on this server yet, so there is nothing to switch on.
           </template>
           <template v-else>
             This browser cannot receive notifications. A private window, or a version too old for
