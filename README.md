@@ -365,8 +365,29 @@ Rotating the pair signs every device out of notifications — a browser binds it
 key it was created with — so `setup.sh --rotate` deliberately leaves these alone, and
 `vapid-keys.sh` needs an explicit `--rotate` to replace a pair that already exists.
 
+## Taking a copy
+
+`GET /api/export` streams one zip with everything in it, linked from *Us*.
+
+- **timeline.html** — the whole story as a single page: no server, no JavaScript, no network, photos
+  beside it. This is the copy meant for reading, and the reason the feature exists: a private
+  archive of irreplaceable things must not be hostage to the software holding it.
+- **timeline.json** — the same story as data, for moving it somewhere else.
+- **photos/** — every photo at full size, named `date-title-n.webp` so the folder sorts
+  chronologically and each file makes sense alone.
+
+It streams rather than buffers — gigabytes are possible — and every photo is opened lazily, so one
+object stream is live at a time however many there are. Photos are stored, not deflated: WebP does
+not compress twice. Entry sizes are deliberately *not* declared, because yazl aborts the whole
+archive if a stream disagrees with its promised size, which would turn one photo the object store
+has lost into a corrupt export of everything else; a missing file becomes an empty entry instead.
+
+The test opens the archive and reads it back rather than checking the status code — the promise is
+that the file works elsewhere, and a page whose images all point at the wrong path satisfies every
+cheaper assertion. That was a real bug, caught exactly that way.
+
 ## Not built yet (by design)
 
-AI recaps, "on this day", bucket lists, exports, print, video and voice memories, sharing, and
-notifications for anything other than yearly dates (a partner adding a memory, a plan coming up).
+AI recaps, bucket lists, print, video and voice memories, sharing, a list of the devices
+notifications go to, and reminders for one-off plans rather than yearly dates.
 `docs/DESIGN.md` §8 records where each one attaches.

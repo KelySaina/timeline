@@ -210,6 +210,27 @@ async function signOut(): Promise<void> {
         </span>
         <FaIcon icon="chevron-right" class="shrink-0 text-[0.75rem] text-muted" />
       </RouterLink>
+      <!--
+        A plain link, not a fetch. The archive is built as it is sent and can run to gigabytes, so
+        the browser has to be the thing saving it — pulling it through JavaScript would mean holding
+        the whole story in memory first.
+      -->
+      <a
+        href="/api/export"
+        download
+        class="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-[var(--surface-sunk)]"
+      >
+        <FaIcon icon="download" class="text-muted" />
+        <span class="min-w-0 flex-1 text-[0.9375rem]">
+          Take a copy
+          <span class="block text-[0.75rem] text-muted">
+            Every memory and every photo in one file, with a page that opens in any browser —
+            no app, no internet.
+          </span>
+        </span>
+        <FaIcon icon="chevron-right" class="shrink-0 text-[0.75rem] text-muted" />
+      </a>
+
       <div class="flex items-center gap-3 px-5 py-4">
         <FaIcon icon="lock" class="text-muted" />
         <span class="flex-1 text-[0.9375rem]">

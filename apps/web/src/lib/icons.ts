@@ -7,7 +7,7 @@ import {
   faRightFromBracket, faSort, faSpinner, faStar, faSun, faTag, faTrashCan, faUpload, faUser,
   faUserPlus, faXmark, faPlane, faCalendarDay, faSliders, faCircleUser, faPalette,
   faWandMagicSparkles, faMobileScreenButton, faArrowUpFromBracket, faSquarePlus, faSwatchbook,
-  faBell, faBellSlash,
+  faBell, faBellSlash, faDownload,
 } from '@fortawesome/free-solid-svg-icons';
 import { faHeart as faHeartOutline, faImages } from '@fortawesome/free-regular-svg-icons';
 
@@ -19,6 +19,6 @@ library.add(
   faRightFromBracket, faSort, faSpinner, faStar, faSun, faTag, faTrashCan, faUpload, faUser,
   faUserPlus, faXmark, faPlane, faCalendarDay, faSliders, faCircleUser, faPalette,
   faWandMagicSparkles, faMobileScreenButton, faArrowUpFromBracket, faSquarePlus, faSwatchbook,
-  faBell, faBellSlash,
+  faBell, faBellSlash, faDownload,
   faHeartOutline, faImages,
 );

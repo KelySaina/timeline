@@ -9,6 +9,7 @@ import { loadSession } from './middleware/session.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { couplesRouter } from './modules/couples/couples.routes.js';
 import { eventsRouter, searchRouter } from './modules/events/events.routes.js';
+import { exportRouter } from './modules/export/export.routes.js';
 import { photosRouter } from './modules/photos/photos.routes.js';
 import { pushRouter } from './modules/push/push.routes.js';
 import { realtimeRouter } from './modules/realtime/realtime.routes.js';
@@ -44,7 +45,7 @@ export function createApp() {
    * there is anyone to be reminded about.
    */
   api.use(authRouter, couplesRouter, pushRouter);
-  api.use(eventsRouter, searchRouter, upcomingRouter, photosRouter, realtimeRouter);
+  api.use(eventsRouter, searchRouter, upcomingRouter, photosRouter, exportRouter, realtimeRouter);
   app.use('/api', api);
 
   app.use(notFoundHandler);

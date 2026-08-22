@@ -260,6 +260,10 @@ of root credentials.
 | `text` + check constraint, not a Postgres enum | `ALTER TYPE` cannot be rolled back inside a transaction; a check can | Same pattern as `theme` |
 | Layouts derive their shape from existing columns | No new writing burden on the couple: the gap between dates, a location, a photo count and a mood are already there | A layout needing new data would need a new field first |
 | One SVG segment per memory, not one path per year | A single path needs measured card heights and tears on reflow; a stretched per-row segment cannot | — |
+| Export streams a zip, built as it is sent | An archive of a long relationship is gigabytes; buffering it would kill the process | Lazily-opened entries keep one object stream live at a time |
+| Export declares no entry sizes | yazl aborts the archive when a stream disagrees with its promised size, so one lost photo would corrupt everything else | A missing file becomes an empty entry |
+| The archive carries a plain HTML page, not just JSON | The point is that the story outlives this app: no server, no script, no network | Print styles are already there |
+| `proxy_hide_header` for the headers helmet also sets | `add_header` appends rather than replaces, so every /api/ response carried two Referrer-Policy values and two conflicting X-Frame-Options | Helmet stays, because in development the API is reached with no proxy |
 | Docker Compose (db + api + web) | One command to run the whole stack | Same images deploy to a real host |
 | Live updates over SSE, not WebSocket | Traffic is one-directional, rides the session cookie, needs no upgrade through nginx/Traefik, browser owns the reconnect | Bidirectional features (typing, presence) would need the upgrade |
 | The stream carries a nudge, not content | Every update is re-read through the normal endpoint, so the couple check stays on the read path and a stream cannot leak what an endpoint would refuse | Payloads could carry rows later; the authz cost is the reason not to |
