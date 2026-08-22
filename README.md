@@ -342,8 +342,16 @@ and then falls back to the local image regardless.
 The next deploy carries the keys forward on its own: `.env` is gitignored, so the box keeps its own,
 and `setup.sh` preserves whatever is already there.
 
+`VAPID_SUBJECT` is a contact address for whoever runs the deployment, sent to the push service on
+every request. Both the script and the API refuse a placeholder: a malformed one is rejected by the
+push service at *send* time, which for a reminder is next week rather than now. If the keys are
+present but the subject is unusable the API still boots — it says so in the log and leaves
+notifications off, because taking every screen down over a feature nobody has switched on is the
+wrong trade.
+
 Rotating the pair signs every device out of notifications — a browser binds its subscription to the
-key it was created with — so `setup.sh --rotate` deliberately leaves these alone.
+key it was created with — so `setup.sh --rotate` deliberately leaves these alone, and
+`vapid-keys.sh` needs an explicit `--rotate` to replace a pair that already exists.
 
 ## Not built yet (by design)
 

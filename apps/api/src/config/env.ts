@@ -61,9 +61,34 @@ export const env = parsed.data;
 export const isProd = env.NODE_ENV === 'production';
 
 /**
+ * The VAPID subject is a contact URI for whoever runs this deployment, and it is sent to the push
+ * service on every request. A push service rejects a malformed one, so a typo here means every
+ * notification fails — but not until one is actually sent, which for a reminder could be next week.
+ *
+ * Checked shallowly and on purpose: enough to catch a placeholder pasted in verbatim — neither
+ * 'mailto:YOUR_REAL_EMAIL' nor 'mailto:you@your-domain' survives it — and not enough to argue with
+ * anyone about what an address may contain.
+ */
+const usableSubject = (value: string): boolean =>
+  /^mailto:[^\s@]+@[^\s@.]+\.[^\s@.]+/.test(value) || /^https:\/\/[^\s]+\.[^\s]+/.test(value);
+
+const hasKeys = Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
+
+/**
  * Whether this deployment can send push at all. Everything push-related checks this rather than
  * the keys: an install whose .env has no VAPID pair is a normal, supported state — the endpoints
  * say so honestly and the SPA hides the affordance — not a broken one.
+ *
+ * A bad subject lands in that same state rather than stopping the process. Refusing to boot would
+ * trade every screen of the app for a feature nobody has switched on yet, so the API says loudly
+ * what is wrong and carries on without notifications.
  */
-export const pushConfigured =
-  Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
+export const pushConfigured = hasKeys && usableSubject(env.VAPID_SUBJECT!);
+
+if (hasKeys && !pushConfigured) {
+  console.error(
+    `[config] VAPID_SUBJECT is not a usable contact URI (${env.VAPID_SUBJECT}) — notifications are ` +
+      'disabled until it is a real "mailto:someone@example.com" or an https:// URL. Push services ' +
+      'reject anything else, and reject it at send time rather than now.',
+  );
+}

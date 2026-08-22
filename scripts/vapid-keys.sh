@@ -3,7 +3,10 @@
 # Timeline — generate a VAPID keypair for web push.
 #
 #   ./scripts/vapid-keys.sh            print three lines to paste into .env
-#   ./scripts/vapid-keys.sh --write    append them to .env if it has none yet
+#   ./scripts/vapid-keys.sh --write    fill them into .env if it has none yet
+#   ./scripts/vapid-keys.sh --rotate   replace an existing pair (signs every device out)
+#
+#   --subject=mailto:you@example.com   contact address for the push service; required to look real
 #
 # A VAPID key is an ordinary P-256 keypair in base64url, so openssl is enough —
 # no npm install, nothing to run inside a container. That matters because the
@@ -17,14 +20,27 @@ set -euo pipefail
 
 SUBJECT="${VAPID_SUBJECT:-mailto:admin@example.com}"
 WRITE=0
+ROTATE=0
 for arg in "$@"; do
   case "$arg" in
     --write) WRITE=1 ;;
+    --rotate) WRITE=1; ROTATE=1 ;;
     --subject=*) SUBJECT="${arg#*=}" ;;
-    -h|--help) sed -n '3,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '3,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
+
+# The subject is sent to the push service on every request, and a malformed one is rejected there
+# rather than here — so it is checked before anything is written. Catches a placeholder pasted in
+# whole, which is the way this actually goes wrong.
+case "$SUBJECT" in
+  mailto:*@*.*) ;;
+  https://*.*) ;;
+  *) echo "VAPID_SUBJECT '$SUBJECT' is not a usable contact URI." >&2
+     echo "Pass a real one:  --subject=mailto:you@example.com" >&2
+     exit 2 ;;
+esac
 
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
 
@@ -50,11 +66,18 @@ PUBLIC="$(openssl ec -in "$TMP/key.pem" -pubout -outform DER 2>/dev/null |
 
 if [ "$WRITE" -eq 1 ]; then
   [ -f .env ] || { echo ".env not found — run from the repo root" >&2; exit 1; }
-  if grep -qE '^VAPID_PUBLIC_KEY=.+' .env; then
+  if [ "$ROTATE" -eq 0 ] && grep -qE '^VAPID_PUBLIC_KEY=.+' .env; then
     echo ".env already has a VAPID_PUBLIC_KEY — refusing to replace it."
-    echo "Rotating would sign every device out of notifications; delete the three lines by hand if"
-    echo "that is really what you want."
+    echo "Rotating signs every device out of notifications, because a browser binds its subscription"
+    echo "to the key it was created with. Pass --rotate if that is really what you want."
     exit 1
+  fi
+  if [ "$ROTATE" -eq 1 ]; then
+    # Blank them so the fill-in path below applies, rather than appending a second set of lines.
+    # '#' as the delimiter, because the alternation already uses '|'.
+    sed -i.bak -E 's#^(VAPID_PUBLIC_KEY|VAPID_PRIVATE_KEY|VAPID_SUBJECT)=.*#\1=#' .env
+    rm -f .env.bak
+    echo "Rotating: every device already subscribed will stop receiving until it is turned on again."
   fi
   # Replace the empty placeholders if they exist, otherwise append.
   if grep -qE '^VAPID_PUBLIC_KEY=$' .env; then
