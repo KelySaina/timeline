@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { api, query } from '@/api/client';
+import { api, clientId, query } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
 import type { EventDraft, EventType, Summary, TimelineEvent, UpcomingItem } from '@/api/types';
 import { todayIso } from '@/lib/format';
@@ -142,6 +142,51 @@ export const useTimelineStore = defineStore('timeline', () => {
     await Promise.all([refreshSummary(), loadUpcoming()]);
   }
 
+  /**
+   * Re-read exactly the window that is already on screen. Used when the change stream was asleep —
+   * a phone in a pocket suspends it — so catching up does not mean snapping the reader back to the
+   * top of the story. Capped at the endpoint's own maximum page.
+   */
+  async function refresh(): Promise<void> {
+    if (!loaded.value) return;
+    const span = Math.min(100, Math.max(PAGE_SIZE, events.value.length));
+    const list = await api.get<{ events: TimelineEvent[]; total: number }>(
+      `/events${query({ ...listParams(0), limit: span })}`,
+    );
+    events.value = list.events;
+    total.value = list.total;
+    await Promise.all([refreshSummary(), loadUpcoming()]);
+  }
+
+  /**
+   * Apply a change the other side of the story made. The stream carries no content — only "row X
+   * changed" — so the memory is re-read through the normal endpoint and the couple check stays on
+   * the read path exactly as it is for a first-party fetch.
+   */
+  async function applyRemote(kind: 'created' | 'updated' | 'deleted', id: string): Promise<void> {
+    if (kind === 'deleted') {
+      const before = events.value.length;
+      events.value = events.value.filter((event) => event.id !== id);
+      if (events.value.length < before) total.value = Math.max(0, total.value - 1);
+    } else if (loaded.value) {
+      if (isFiltered.value) {
+        // A filtered list cannot decide locally whether an incoming memory belongs in it.
+        await load();
+      } else {
+        const event = await fetchOne(id).catch(() => null);
+        if (event) {
+          const before = events.value.length;
+          absorb(event);
+          // absorb() keeps future-dated memories out of the story scroll, so the count follows what
+          // actually landed rather than assuming a create always adds a row.
+          total.value = Math.max(0, total.value + (events.value.length - before));
+        }
+      }
+    }
+    // The counters describe the same events whether or not the scroll is on screen.
+    await Promise.all([refreshSummary(), loadUpcoming()]);
+  }
+
   async function addPhotos(id: string, files: File[]): Promise<TimelineEvent> {
     const form = new FormData();
     for (const file of files) form.append('photos', file);
@@ -149,7 +194,10 @@ export const useTimelineStore = defineStore('timeline', () => {
       method: 'POST',
       body: form,
       credentials: 'same-origin',
-      headers: { 'X-CSRF-Token': document.cookie.match(/tl_csrf=([^;]+)/)?.[1] ?? '' },
+      headers: {
+        'X-CSRF-Token': document.cookie.match(/tl_csrf=([^;]+)/)?.[1] ?? '',
+        'X-Client-Id': clientId,
+      },
     });
     const payload = (await response.json()) as { event?: TimelineEvent; error?: { message: string } };
     if (!response.ok || !payload.event) throw new Error(payload.error?.message ?? 'Those photos did not upload');
@@ -195,5 +243,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     activeTypes, activeYear, order, hasMore, isFiltered, grouped,
     load, loadMore, loadUpcoming, toggleType, setYear, setOrder, clearFilters,
     create, update, remove, addPhotos, removePhoto, fetchOne, byId, reset, refreshSummary,
+    applyRemote, refresh,
   };
 });

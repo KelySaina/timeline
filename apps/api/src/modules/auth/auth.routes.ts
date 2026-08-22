@@ -9,6 +9,7 @@ import { getCoupleSnapshot, refreshDerivedForUser } from '../couples/couples.ser
 import { avatarUpload, storeAvatar } from '../photos/photos.service.js';
 import { notFound } from '../../lib/errors.js';
 import { ObjectNotFound, readObject } from '../photos/storage/index.js';
+import { notify } from '../realtime/notify.js';
 import * as service from './auth.service.js';
 import type { AuthUser } from '../../types.js';
 
@@ -84,12 +85,14 @@ authRouter.patch('/me', requireUser, verifyCsrf, validate(profileSchema), async 
   const user = await service.updateProfile(req.user!.id, req.body);
   // A changed birthday must move the derived reminder with it.
   if (req.body.birthday !== undefined) await refreshDerivedForUser(user.id);
+  await notify(req, 'couple.updated');
   res.json({ user: publicUser(user) });
 });
 
 authRouter.post('/me/avatar', requireUser, verifyCsrf, avatarUpload, async (req, res) => {
   const key = await storeAvatar(req.user!.id, req.file);
   const user = await service.setAvatarKey(req.user!.id, key);
+  await notify(req, 'couple.updated');
   res.json({ user: publicUser(user) });
 });
 

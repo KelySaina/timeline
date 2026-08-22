@@ -24,6 +24,16 @@ const readCookie = (name: string): string | null => {
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 };
 
+/**
+ * This tab's identity for the change stream. Mutations carry it in X-Client-Id and the stream
+ * announces it as ?client=..., so a tab can recognise its own write coming back and skip it —
+ * while the same person's other devices still receive it. Per page load on purpose: two tabs are
+ * two clients, and each should react to what the other does.
+ */
+export const clientId: string = (globalThis.crypto?.randomUUID?.() ?? `c${Date.now()}${Math.random()}`)
+  .replace(/[^A-Za-z0-9_-]/g, '')
+  .slice(0, 64);
+
 type RequestOptions = { method?: string; body?: unknown; signal?: AbortSignal };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -35,6 +45,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (method !== 'GET') {
     const csrf = readCookie('tl_csrf');
     if (csrf) headers['X-CSRF-Token'] = csrf;
+    headers['X-Client-Id'] = clientId;
   }
 
   const response = await fetch(`/api${path}`, {

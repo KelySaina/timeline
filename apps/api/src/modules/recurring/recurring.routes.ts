@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireCouple } from '../../middleware/coupleContext.js';
 import { requireUser, verifyCsrf } from '../../middleware/session.js';
 import { valid, validate } from '../../middleware/validate.js';
+import { notify } from '../realtime/notify.js';
 import * as service from './recurring.service.js';
 
 const idParam = z.object({ id: z.string().uuid() });
@@ -33,6 +34,7 @@ upcomingRouter.get('/recurring', async (req, res) => {
 
 upcomingRouter.post('/recurring', verifyCsrf, validate(recurringBody), async (req, res) => {
   const id = await service.createRecurring(req.couple!.id, req.user!.id, req.body);
+  await notify(req, 'recurring.changed', id);
   res.status(201).json({ id, recurring: await service.listRecurring(req.couple!.id) });
 });
 
@@ -42,12 +44,16 @@ upcomingRouter.patch(
   validate(idParam, 'params'),
   validate(recurringBody.partial().refine((v) => Object.keys(v).length > 0, 'Nothing to update')),
   async (req, res) => {
-    await service.updateRecurring(req.couple!.id, valid<{ id: string }>(req, 'params').id, req.body);
+    const { id } = valid<{ id: string }>(req, 'params');
+    await service.updateRecurring(req.couple!.id, id, req.body);
+    await notify(req, 'recurring.changed', id);
     res.json({ recurring: await service.listRecurring(req.couple!.id) });
   },
 );
 
 upcomingRouter.delete('/recurring/:id', verifyCsrf, validate(idParam, 'params'), async (req, res) => {
-  await service.deleteRecurring(req.couple!.id, valid<{ id: string }>(req, 'params').id);
+  const { id } = valid<{ id: string }>(req, 'params');
+  await service.deleteRecurring(req.couple!.id, id);
+  await notify(req, 'recurring.changed', id);
   res.status(204).end();
 });

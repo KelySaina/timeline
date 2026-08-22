@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { api } from '@/api/client';
+import { api, clientId } from '@/api/client';
 import type { Couple, InvitePreview, Invitation, Theme, User } from '@/api/types';
 import { THEMES, themeMeta } from '@/lib/themes';
 
@@ -120,7 +120,10 @@ export const useAuthStore = defineStore('auth', () => {
       method: 'POST',
       body: form,
       credentials: 'same-origin',
-      headers: { 'X-CSRF-Token': document.cookie.match(/tl_csrf=([^;]+)/)?.[1] ?? '' },
+      headers: {
+        'X-CSRF-Token': document.cookie.match(/tl_csrf=([^;]+)/)?.[1] ?? '',
+        'X-Client-Id': clientId,
+      },
     });
     if (!response.ok) throw new Error('Upload failed');
     const payload = (await response.json()) as { user: User };

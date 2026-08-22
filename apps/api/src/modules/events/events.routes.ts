@@ -4,6 +4,7 @@ import { requireCouple } from '../../middleware/coupleContext.js';
 import { requireUser, verifyCsrf } from '../../middleware/session.js';
 import { valid, validate } from '../../middleware/validate.js';
 import { photoUpload } from '../photos/photos.service.js';
+import { notify } from '../realtime/notify.js';
 import * as service from './events.service.js';
 import { EVENT_TYPES, MOODS } from './events.types.js';
 
@@ -71,7 +72,9 @@ eventsRouter.post(
   verifyCsrf,
   validate(bodySchema.refine(withRange, { message: 'The end date comes before the start date', path: ['endDate'] })),
   async (req, res) => {
-    res.status(201).json({ event: await service.createEvent(req.couple!.id, req.user!.id, req.body) });
+    const event = await service.createEvent(req.couple!.id, req.user!.id, req.body);
+    await notify(req, 'event.created', event.id);
+    res.status(201).json({ event });
   },
 );
 
@@ -85,12 +88,16 @@ eventsRouter.patch(
   validate(idParam, 'params'),
   validate(patchSchema.refine(withRange, { message: 'The end date comes before the start date', path: ['endDate'] })),
   async (req, res) => {
-    res.json({ event: await service.updateEvent(req.couple!.id, valid<{ id: string }>(req, 'params').id, req.body) });
+    const event = await service.updateEvent(req.couple!.id, valid<{ id: string }>(req, 'params').id, req.body);
+    await notify(req, 'event.updated', event.id);
+    res.json({ event });
   },
 );
 
 eventsRouter.delete('/events/:id', verifyCsrf, validate(idParam, 'params'), async (req, res) => {
-  await service.softDeleteEvent(req.couple!.id, valid<{ id: string }>(req, 'params').id);
+  const { id } = valid<{ id: string }>(req, 'params');
+  await service.softDeleteEvent(req.couple!.id, id);
+  await notify(req, 'event.deleted', id);
   res.status(204).end();
 });
 
@@ -101,9 +108,9 @@ eventsRouter.post(
   photoUpload,
   async (req, res) => {
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
-    res.status(201).json({
-      event: await service.addPhotos(req.couple!.id, req.user!.id, valid<{ id: string }>(req, 'params').id, files),
-    });
+    const event = await service.addPhotos(req.couple!.id, req.user!.id, valid<{ id: string }>(req, 'params').id, files);
+    await notify(req, 'event.updated', event.id);
+    res.status(201).json({ event });
   },
 );
 
@@ -112,7 +119,13 @@ eventsRouter.delete(
   verifyCsrf,
   validate(z.object({ id: z.string().uuid(), photoId: z.string().uuid() }), 'params'),
   async (req, res) => {
-    res.json({ event: await service.removePhoto(req.couple!.id, valid<{ id: string }>(req, 'params').id, valid<{ photoId: string }>(req, 'params').photoId) });
+    const event = await service.removePhoto(
+      req.couple!.id,
+      valid<{ id: string }>(req, 'params').id,
+      valid<{ photoId: string }>(req, 'params').photoId,
+    );
+    await notify(req, 'event.updated', event.id);
+    res.json({ event });
   },
 );
 
@@ -122,7 +135,9 @@ eventsRouter.put(
   validate(idParam, 'params'),
   validate(z.object({ order: z.array(z.string().uuid()).min(1).max(10) })),
   async (req, res) => {
-    res.json({ event: await service.reorderPhotos(req.couple!.id, valid<{ id: string }>(req, 'params').id, req.body.order) });
+    const event = await service.reorderPhotos(req.couple!.id, valid<{ id: string }>(req, 'params').id, req.body.order);
+    await notify(req, 'event.updated', event.id);
+    res.json({ event });
   },
 );
 

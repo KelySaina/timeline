@@ -144,6 +144,32 @@ What keeps MinIO from being *worse* than the volume it replaced (`infra/minio/bo
 
 MinIO is AGPLv3; running it unmodified as part of your own service is fine, but worth knowing.
 
+## Live updates
+
+`GET /api/stream` is a server-sent event stream, opened once per tab for as long as a couple is
+signed in. Server-sent rather than a WebSocket because the traffic only ever flows one way — the
+client still writes over the ordinary REST endpoints — so it rides the session cookie unchanged,
+needs no protocol upgrade through nginx or Traefik, and the browser owns the reconnect.
+
+Three properties are worth knowing, because each one is load-bearing:
+
+- **It carries no content.** A frame says `event.created`, a couple id and a row id — never a title,
+  never a photo. The client then re-reads through `GET /api/events/:id`, so the couple check stays on
+  the read path exactly as it is for a first-party fetch, and a stream can never become a way to
+  read something an endpoint would have refused.
+- **Fan-out goes through Postgres `LISTEN`/`NOTIFY`**, not an array of response objects in one
+  process. A memory written by the replica holding partner A's connection has to reach the replica
+  holding partner B's, and the database is already the thing every replica shares. No Redis, no cron.
+  The `LISTEN` connection is its own client (a pooled one would never be released) and reconnects
+  with a backoff, so a database restart costs live updates for a second, not the API.
+- **A tab does not hear its own writes.** Mutations send `X-Client-Id`; the stream announces the same
+  id as `?client=`. The originating tab already applied the server's response, so replaying it would
+  fight local state — while the same person's *other* devices still update.
+
+`token_version` is re-checked on every heartbeat (25s), so signing out everywhere closes the pipe
+instead of only refusing the next fetch. A backgrounded phone suspends the stream and there is no
+replay, so returning to the app re-reads the window on screen rather than trusting the connection.
+
 ## What it does
 
 - **Timeline** — every event in date order, grouped by year, filtered by type or year, read newest
@@ -156,6 +182,9 @@ MinIO is AGPLv3; running it unmodified as part of your own service is fine, but 
 - **Photos** — multiple per memory, re-encoded server side, thumbnails for the timeline, delivered
   through the API and never from a public URL.
 - **Two people, one story** — one live invite link at a time, single use, 14-day expiry.
+- **Live, without a refresh** — a memory one partner writes appears on the other's timeline in its
+  chronological place, and a theme they pick repaints both screens. Same for edits, deletions,
+  photos, profiles and upcoming dates.
 - **A theme store** — 27 themes in 8 collections (daylight, evening, flowery, antique, neon,
   mechanical, cosmic, elemental), browsed from live preview tiles on the *Us* screen. Every colour
   in the app, including the nine event-type accents, comes from the theme's token set, and the
@@ -176,6 +205,8 @@ MinIO is AGPLv3; running it unmodified as part of your own service is fine, but 
 - The page CSP is included per nginx location, not declared once at server level. `add_header` is not
   additive in nginx: a location that sets any header of its own silently drops every inherited one,
   which is how the document itself can end up as the only response *without* a CSP.
+- The change stream carries no content and re-checks `token_version` on every heartbeat, so it can
+  neither leak what an endpoint would refuse nor outlive the session that opened it.
 
 `npm test` covers the ordering guarantees and the isolation ones: a second couple holding real event
 and photo ids gets 404s on read, write, and delete.

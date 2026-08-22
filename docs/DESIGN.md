@@ -189,6 +189,18 @@ goes through `api/client.ts`, so auth, CSRF, and error normalisation exist in ex
   they are distinguished so an outage never looks like a deleted memory.
 - **Timezones.** Calendar dates stay calendar dates end to end; "today" is resolved client-side.
 - **Soft delete.** `deleted_at` keeps the story recoverable; queries filter it out.
+- **A tab hearing its own write.** Skipped by `X-Client-Id` / `?client=`; the same person's other
+  devices are not the origin, so they still update.
+- **A filtered timeline receiving a memory.** The client cannot decide locally whether it belongs in
+  a filtered list, so a filtered view re-asks the server instead of guessing.
+- **A future-dated memory arriving live.** `absorb()` keeps it out of the story scroll, and the count
+  follows what actually landed rather than assuming a create always adds a row.
+- **A backgrounded phone.** The stream is suspended and there is no replay, so regaining visibility
+  re-reads the window already on screen — without snapping the reader back to the top.
+- **A session revoked while a stream is open.** `token_version` is re-checked every heartbeat, so
+  signing out everywhere closes the pipe rather than only refusing the next fetch.
+- **Shutdown with streams open.** `server.close()` waits for open connections and an SSE response
+  never ends by itself, so the streams are closed first — otherwise deploys stall until SIGKILL.
 
 ### Is an object store more secure than a Docker volume?
 
@@ -220,3 +232,6 @@ of root credentials.
 | Soft delete + `created_by` on events | Enables "on this day", recaps, and undo later | — |
 | Vue SPA + Pinia, no SSR | Private app, nothing to index, simplest deploy | PWA/offline is additive |
 | Docker Compose (db + api + web) | One command to run the whole stack | Same images deploy to a real host |
+| Live updates over SSE, not WebSocket | Traffic is one-directional, rides the session cookie, needs no upgrade through nginx/Traefik, browser owns the reconnect | Bidirectional features (typing, presence) would need the upgrade |
+| The stream carries a nudge, not content | Every update is re-read through the normal endpoint, so the couple check stays on the read path and a stream cannot leak what an endpoint would refuse | Payloads could carry rows later; the authz cost is the reason not to |
+| Fan-out via Postgres `LISTEN`/`NOTIFY` | The API is meant to run as more than one replica, and the database is already the thing they share — no Redis, no cron | The same channel can drive a push worker |

@@ -4,6 +4,8 @@ import { forbidden, notFound } from '../../lib/errors.js';
 import { requireCouple } from '../../middleware/coupleContext.js';
 import { requireUser, verifyCsrf } from '../../middleware/session.js';
 import { valid, validate } from '../../middleware/validate.js';
+import { publish } from '../realtime/bus.js';
+import { clientOf, notify } from '../realtime/notify.js';
 import * as service from './couples.service.js';
 import { THEMES } from './themes.js';
 
@@ -48,6 +50,7 @@ couplesRouter.patch(
   validate(updateSchema),
   async (req, res) => {
     await service.updateCouple(req.couple!.id, req.body);
+    await notify(req, 'couple.updated');
     res.json({ couple: await service.getCoupleSnapshot(req.user!.id) });
   },
 );
@@ -77,6 +80,10 @@ couplesRouter.post(
   validate(codeSchema, 'params'),
   async (req, res) => {
     await service.acceptInvitation(valid<{ code: string }>(req, 'params').code, req.user!.id);
-    res.json({ couple: await service.getCoupleSnapshot(req.user!.id) });
+    const couple = await service.getCoupleSnapshot(req.user!.id);
+    if (couple) {
+      await publish({ couple: couple.id, kind: 'member.joined', actor: req.user!.id, origin: clientOf(req) });
+    }
+    res.json({ couple });
   },
 );

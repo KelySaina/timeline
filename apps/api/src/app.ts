@@ -10,6 +10,7 @@ import { authRouter } from './modules/auth/auth.routes.js';
 import { couplesRouter } from './modules/couples/couples.routes.js';
 import { eventsRouter, searchRouter } from './modules/events/events.routes.js';
 import { photosRouter } from './modules/photos/photos.routes.js';
+import { realtimeRouter } from './modules/realtime/realtime.routes.js';
 import { upcomingRouter } from './modules/recurring/recurring.routes.js';
 
 export function createApp() {
@@ -32,7 +33,7 @@ export function createApp() {
 
   const api = express.Router();
   api.use(loadSession, loadCouple);
-  api.use(authRouter, couplesRouter, eventsRouter, searchRouter, upcomingRouter, photosRouter);
+  api.use(authRouter, couplesRouter, eventsRouter, searchRouter, upcomingRouter, photosRouter, realtimeRouter);
   app.use('/api', api);
 
   app.use(notFoundHandler);

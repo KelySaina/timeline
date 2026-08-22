@@ -3,6 +3,7 @@ import { createApp } from './app.js';
 import { migrate } from './db/migrate.js';
 import { pool } from './db/pool.js';
 import { initStorage } from './modules/photos/storage/index.js';
+import { closeStreams, startRealtime, stopRealtime } from './modules/realtime/bus.js';
 
 const app = createApp();
 
@@ -22,6 +23,7 @@ async function waitForDatabase(attempts = 30): Promise<void> {
 await waitForDatabase();
 await migrate();
 await initStorage();
+await startRealtime();
 
 const server = app.listen(env.PORT, () => {
   console.log(`[boot] timeline api listening on :${env.PORT} (${env.NODE_ENV})`);
@@ -29,6 +31,13 @@ const server = app.listen(env.PORT, () => {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    server.close(() => pool.end().then(() => process.exit(0)));
+    // server.close() waits for open connections, and an SSE stream never ends by itself — so the
+    // streams are ended first, otherwise shutdown blocks until the orchestrator loses patience.
+    closeStreams();
+    server.close(() => {
+      void stopRealtime()
+        .then(() => pool.end())
+        .then(() => process.exit(0));
+    });
   });
 }

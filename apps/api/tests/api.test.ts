@@ -13,6 +13,7 @@ import { createApp } from '../src/app.js';
 import { pool } from '../src/db/pool.js';
 import { migrate } from '../src/db/migrate.js';
 import { initStorage, storageName } from '../src/modules/photos/storage/index.js';
+import { startRealtime, stopRealtime } from '../src/modules/realtime/bus.js';
 import { THEMES } from '../src/modules/couples/themes.js';
 
 let server: Server;
@@ -27,9 +28,9 @@ async function call(
   method: string,
   path: string,
   body?: unknown,
-  options: { csrf?: boolean } = {},
+  options: { csrf?: boolean; headers?: Record<string, string> } = {},
 ): Promise<{ status: number; body: any }> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...options.headers };
   const isForm = body instanceof FormData;
   if (body !== undefined && !isForm) headers['content-type'] = 'application/json';
 
@@ -84,8 +85,10 @@ const photoForm = async (count = 1): Promise<FormData> => {
 before(async () => {
   try {
     await migrate();
-    // Same boot order as the server: schema, then the photo store (bucket or directory).
+    // Same boot order as the server: schema, then the photo store (bucket or directory), then the
+    // LISTEN connection the change stream fans out over.
     await initStorage(3);
+    await startRealtime();
     console.log(`[test] storage driver: ${storageName}`);
   } catch (error) {
     const reason = (error as { code?: string }).code === 'ECONNREFUSED'
@@ -103,6 +106,7 @@ before(async () => {
 
 after(async () => {
   server?.close();
+  await stopRealtime();
   await pool.end();
 });
 
@@ -344,5 +348,142 @@ describe('photos and couple isolation', () => {
     const result = await call(user, 'POST', `/api/events/${created.body.event.id}/photos`, form);
     assert.equal(result.status >= 400, true);
     assert.equal(result.body.error.code !== 'internal_error', true);
+  });
+});
+
+/** Reads an SSE response frame by frame, so a test can wait for one change and give up cleanly. */
+async function openStream(session: Session, client?: string) {
+  const controller = new AbortController();
+  const response = await fetch(`${base}/api/stream${client ? `?client=${client}` : ''}`, {
+    headers: {
+      accept: 'text/event-stream',
+      cookie: [...session.cookies].map(([k, v]) => `${k}=${v}`).join('; '),
+    },
+    signal: controller.signal,
+  });
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  const pending: Record<string, unknown>[] = [];
+  let buffer = '';
+
+  // Unref'd: a pending timer must never be the reason the test process stays alive.
+  const expire = (ms: number) =>
+    new Promise<null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), ms);
+      timer.unref?.();
+    });
+
+  return {
+    status: response.status,
+    contentType: response.headers.get('content-type'),
+    /** The next `change` frame, or null once the budget runs out. */
+    async next(ms = 5000): Promise<Record<string, any> | null> {
+      const deadline = Date.now() + ms;
+      while (!pending.length && Date.now() < deadline) {
+        const chunk = await Promise.race([reader.read(), expire(deadline - Date.now())]);
+        if (!chunk || chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() ?? '';
+        for (const part of parts) {
+          if (/^event: change$/m.test(part)) {
+            const data = /^data: (.+)$/m.exec(part)?.[1];
+            if (data) pending.push(JSON.parse(data));
+          }
+        }
+      }
+      return pending.shift() ?? null;
+    },
+    close(): void {
+      controller.abort();
+    },
+  };
+}
+
+describe('the change stream', () => {
+  it('tells a partner what the other one just wrote, and tells nobody else', async () => {
+    const owner = await signup('Streamer');
+    await call(owner, 'POST', '/api/couples', { startedOn: '2020-05-05' });
+    const invite = await call(owner, 'POST', '/api/couples/me/invitations');
+    const partner = await signup('Listener');
+    assert.equal((await call(partner, 'POST', `/api/invitations/${invite.body.invitation.code}/accept`)).status, 200);
+
+    // A couple with no connection to the story above: it must hear none of this.
+    const outsider = await signup('Bystander');
+    await call(outsider, 'POST', '/api/couples', {});
+
+    const listening = await openStream(partner, 'partnertab1');
+    const unrelated = await openStream(outsider, 'outsidertab');
+    assert.equal(listening.status, 200);
+    assert.equal(listening.contentType?.startsWith('text/event-stream'), true);
+
+    try {
+      const created = await call(owner, 'POST', '/api/events', {
+        type: 'milestone', title: 'Moved in together', eventDate: '2021-09-01',
+      });
+      assert.equal(created.status, 201);
+      const eventId = created.body.event.id;
+
+      const change = await listening.next();
+      assert.ok(change, 'the partner never heard about the new memory');
+      assert.equal(change.kind, 'event.created');
+      assert.equal(change.id, eventId);
+      // A nudge, never content: the memory itself is still only reachable through /events/:id.
+      assert.equal(change.title, undefined);
+      assert.equal(Object.keys(change).sort().join(','), 'actor,couple,id,kind');
+
+      // The same write, from the outsider's seat: nothing at all.
+      assert.equal(await unrelated.next(1200), null, 'a change leaked to another couple');
+
+      const edited = await call(owner, 'PATCH', `/api/events/${eventId}`, { title: 'Moved in' });
+      assert.equal(edited.status, 200);
+      assert.equal((await listening.next())?.kind, 'event.updated');
+
+      assert.equal((await call(owner, 'DELETE', `/api/events/${eventId}`)).status, 204);
+      const removed = await listening.next();
+      assert.equal(removed?.kind, 'event.deleted');
+      assert.equal(removed?.id, eventId);
+    } finally {
+      listening.close();
+      unrelated.close();
+    }
+  });
+
+  it('does not echo a write back to the tab that made it', async () => {
+    const owner = await signup('Selfecho');
+    await call(owner, 'POST', '/api/couples', {});
+    const mine = await openStream(owner, 'sametabxx');
+    const otherDevice = await openStream(owner, 'otherdevice');
+
+    try {
+      const created = await call(
+        owner,
+        'POST',
+        '/api/events',
+        { type: 'memory', title: 'Written here', eventDate: '2024-03-03' },
+        { headers: { 'x-client-id': 'sametabxx' } },
+      );
+      assert.equal(created.status, 201);
+
+      // The originating tab already applied the response; replaying it would fight local state.
+      assert.equal(await mine.next(1200), null, 'a tab was told about its own write');
+      // The same person's other device is not the origin, so it still updates.
+      assert.equal((await otherDevice.next())?.id, created.body.event.id);
+    } finally {
+      mine.close();
+      otherDevice.close();
+    }
+  });
+
+  it('refuses a stream to anyone without a session or without a couple', async () => {
+    assert.equal((await fetch(`${base}/api/stream`)).status, 401);
+
+    const single = await signup('Coupleless');
+    const response = await fetch(`${base}/api/stream`, {
+      headers: { cookie: [...single.cookies].map(([k, v]) => `${k}=${v}`).join('; ') },
+    });
+    assert.equal(response.status, 403);
+    await response.body?.cancel();
   });
 });
