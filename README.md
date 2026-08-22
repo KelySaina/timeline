@@ -170,6 +170,27 @@ Three properties are worth knowing, because each one is load-bearing:
 instead of only refusing the next fetch. A backgrounded phone suspends the stream and there is no
 replay, so returning to the app re-reads the window on screen rather than trusting the connection.
 
+## Installing it (PWA)
+
+`apps/web/public/` holds the manifest, the icon set and a hand-written service worker. Hand-written
+because the failure mode of a generated precache manifest is a stale shell that outlives the deploy,
+and Vite's asset filenames are already content-hashed — runtime caching is enough:
+
+| Request | Strategy | Why |
+| --- | --- | --- |
+| `/api/*` | **never cached** | The couple's private data. A cache would outlive signing out — and photos come through `/api/photos/:id`. |
+| `/assets/*` | cache-first, forever | Content-hashed, so a new build asks for new filenames. |
+| navigation | network-first, cached shell as fallback | An offline launch opens the app, not a browser error. |
+
+The worker is **not registered by the dev server** — a worker that outlives a `vite build` preview
+and then serves its shell to `vite dev` is the classic way to lose an hour to a change that was
+already correct. Updates are offered rather than forced: the new worker activates immediately, and
+the open page keeps its version until the reader takes the "Reload" toast, because reloading
+someone mid-sentence in the composer is worse than running one build behind.
+
+Timeline data is deliberately **not** available offline: caching it would mean the couple's story
+sitting in a cache that survives sign-out. Offline gets you the shell and a failed fetch.
+
 ## What it does
 
 - **Timeline** — every event in date order, grouped by year, filtered by type or year, read newest
@@ -185,6 +206,8 @@ replay, so returning to the app re-reads the window on screen rather than trusti
 - **Live, without a refresh** — a memory one partner writes appears on the other's timeline in its
   chronological place, and a theme they pick repaints both screens. Same for edits, deletions,
   photos, profiles and upcoming dates.
+- **Installable** — a real home-screen app: standalone window, themed status bar, an "Add a memory"
+  shortcut, and a shell that opens offline instead of a browser error page.
 - **A theme store** — 27 themes in 8 collections (daylight, evening, flowery, antique, neon,
   mechanical, cosmic, elemental), browsed from live preview tiles on the *Us* screen. Every colour
   in the app, including the nine event-type accents, comes from the theme's token set, and the
@@ -213,5 +236,9 @@ and photo ids gets 404s on read, write, and delete.
 
 ## Not built yet (by design)
 
-AI recaps, "on this day", bucket lists, exports, print, video and voice memories, notifications,
-sharing. `docs/DESIGN.md` §8 records where each one attaches.
+AI recaps, "on this day", bucket lists, exports, print, video and voice memories, push
+notifications, sharing. `docs/DESIGN.md` §8 records where each one attaches.
+
+`recurring_events.remind_days_before` is stored and editable but nothing sends anything yet: the
+service worker that landed with the PWA is the delivery channel that was missing, so push is now a
+subscription table and a scheduler away rather than a from-scratch build.

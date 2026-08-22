@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { useToastStore } from '@/stores/toast';
+import type { Toast } from '@/stores/toast';
 
 const toasts = useToastStore();
+
+function act(toast: Toast): void {
+  toast.action?.run();
+  toasts.dismiss(toast.id);
+}
 </script>
 
 <template>
@@ -13,10 +19,11 @@ const toasts = useToastStore();
         leave-active-class="transition duration-200 ease-in"
         leave-to-class="translate-y-1 opacity-0"
       >
-        <button
+        <div
           v-for="toast in toasts.toasts"
           :key="toast.id"
-          class="pointer-events-auto max-w-md rounded-full border px-4 py-2.5 text-sm shadow-[var(--shadow-float)] backdrop-blur"
+          role="status"
+          class="pointer-events-auto flex max-w-md items-center gap-3 rounded-full border px-4 py-2.5 text-sm shadow-[var(--shadow-float)] backdrop-blur"
           :class="
             toast.tone === 'error'
               ? 'border-[color-mix(in_oklab,var(--ember)_40%,transparent)] bg-[color-mix(in_oklab,var(--ember)_14%,var(--surface))] text-ink'
@@ -24,11 +31,19 @@ const toasts = useToastStore();
                 ? 'border-[color-mix(in_oklab,var(--ember)_30%,transparent)] bg-surface text-ink'
                 : 'border-line-strong bg-surface text-ink'
           "
-          @click="toasts.dismiss(toast.id)"
         >
-          <FaIcon v-if="toast.tone === 'warm'" icon="heart" class="mr-1.5 text-[var(--ember)]" />
-          {{ toast.message }}
-        </button>
+          <button class="min-w-0 text-left" @click="toasts.dismiss(toast.id)">
+            <FaIcon v-if="toast.tone === 'warm'" icon="heart" class="mr-1.5 text-[var(--ember)]" />
+            {{ toast.message }}
+          </button>
+          <button
+            v-if="toast.action"
+            class="shrink-0 rounded-full border border-[color-mix(in_oklab,var(--ember)_45%,transparent)] px-3 py-1 text-xs font-medium text-[var(--ember)] transition hover:bg-[var(--ember-soft)]"
+            @click="act(toast)"
+          >
+            {{ toast.action.label }}
+          </button>
+        </div>
       </TransitionGroup>
     </div>
   </Teleport>

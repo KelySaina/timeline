@@ -33,7 +33,18 @@ onMounted(async () => {
   if (!timeline.loaded) await timeline.load();
   await timeline.loadUpcoming();
   await openFromRoute();
+  openFromShortcut();
 });
+
+/**
+ * The installed app's "Add a memory" shortcut lands on /?compose=1. The flag is stripped once used,
+ * so a reload or a back-navigation does not reopen the composer.
+ */
+function openFromShortcut(): void {
+  if (!route.query.compose) return;
+  ui.compose();
+  void router.replace({ path: route.path, query: { ...route.query, compose: undefined } });
+}
 
 /** /memory/:id is a real, linkable address for a memory. */
 async function openFromRoute(): Promise<void> {

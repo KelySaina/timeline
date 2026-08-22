@@ -201,6 +201,8 @@ goes through `api/client.ts`, so auth, CSRF, and error normalisation exist in ex
   signing out everywhere closes the pipe rather than only refusing the next fetch.
 - **Shutdown with streams open.** `server.close()` waits for open connections and an SSE response
   never ends by itself, so the streams are closed first — otherwise deploys stall until SIGKILL.
+- **A stale shell after a deploy.** The worker never serves `index.html` from cache first, and the
+  dev server never registers a worker at all.
 
 ### Is an object store more secure than a Docker volume?
 
@@ -235,3 +237,5 @@ of root credentials.
 | Live updates over SSE, not WebSocket | Traffic is one-directional, rides the session cookie, needs no upgrade through nginx/Traefik, browser owns the reconnect | Bidirectional features (typing, presence) would need the upgrade |
 | The stream carries a nudge, not content | Every update is re-read through the normal endpoint, so the couple check stays on the read path and a stream cannot leak what an endpoint would refuse | Payloads could carry rows later; the authz cost is the reason not to |
 | Fan-out via Postgres `LISTEN`/`NOTIFY` | The API is meant to run as more than one replica, and the database is already the thing they share — no Redis, no cron | The same channel can drive a push worker |
+| Hand-written service worker | A generated precache manifest's failure mode is a stale shell outliving the deploy; hashed asset names make runtime caching sufficient | Web push attaches to this worker |
+| API responses never cached by the worker | A cache of private data would outlive signing out | Offline reads would need an explicit, wipe-on-logout store |
