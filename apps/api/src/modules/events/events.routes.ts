@@ -101,6 +101,23 @@ eventsRouter.delete('/events/:id', verifyCsrf, validate(idParam, 'params'), asyn
   res.status(204).end();
 });
 
+/**
+ * Undo a delete. A POST rather than a PATCH on the event: the client that offers "Undo" holds
+ * nothing but the id, and there is no field to send.
+ */
+eventsRouter.post(
+  '/events/:id/restore',
+  verifyCsrf,
+  validate(idParam, 'params'),
+  async (req, res) => {
+    const event = await service.restoreEvent(req.couple!.id, valid<{ id: string }>(req, 'params').id);
+    // 'created' rather than 'updated': to the other side of the story a row has appeared, and that
+    // is the change their timeline has to apply.
+    await notify(req, 'event.created', event.id);
+    res.json({ event });
+  },
+);
+
 eventsRouter.post(
   '/events/:id/photos',
   verifyCsrf,

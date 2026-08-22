@@ -188,7 +188,8 @@ goes through `api/client.ts`, so auth, CSRF, and error normalisation exist in ex
 - **Object store down vs object missing.** A missing key is a 404; an unreachable store is a 500 —
   they are distinguished so an outage never looks like a deleted memory.
 - **Timezones.** Calendar dates stay calendar dates end to end; "today" is resolved client-side.
-- **Soft delete.** `deleted_at` keeps the story recoverable; queries filter it out.
+- **Soft delete.** `deleted_at` keeps the story recoverable; queries filter it out. `POST /events/:id/restore`
+  clears it, which is what the Undo toast calls — the same id, the same photos, the same place in the story.
 - **A tab hearing its own write.** Skipped by `X-Client-Id` / `?client=`; the same person's other
   devices are not the origin, so they still update.
 - **A filtered timeline receiving a memory.** The client cannot decide locally whether it belongs in
@@ -239,7 +240,8 @@ of root credentials.
 | Bytes still streamed through the API — no presigned URLs | Authorization applies to every request, not to a URL that outlives the check | Presigning is possible later, but it moves the check off the hot path |
 | MinIO gets a scoped service account, never root | A leaked API key can read and write one bucket and nothing else | Per-tenant prefixes/keys if this ever goes multi-region |
 | Server-side thumbnails (sharp, webp) | Timeline stays fast on mobile data | Video posters reuse the pipeline |
-| Soft delete + `created_by` on events | Enables "on this day", recaps, and undo later | — |
+| Soft delete + `created_by` on events | The row never leaves, so undo is a cleared column rather than a restore | "On this day" and recaps read the same rows |
+| Undo is not time-boxed | A window is either too generous to be a safeguard or short enough to fail on a slow phone; nothing purges the row and only the couple can name its id | The affordance expires, the ability does not |
 | Vue SPA + Pinia, no SSR | Private app, nothing to index, simplest deploy | PWA/offline is additive |
 | Story layout is a column on `couples`, like `theme` | The shape belongs to the relationship, not the device, and rides the existing change stream | Adding a layout is one migration editing one check constraint |
 | `text` + check constraint, not a Postgres enum | `ALTER TYPE` cannot be rolled back inside a transaction; a check can | Same pattern as `theme` |

@@ -245,6 +245,9 @@ sitting in a cache that survives sign-out. Offline gets you the shell and a fail
 - **Add a memory in seconds** — date → type → title → save. Story, photos, place, mood and tags are
   one tap away and always optional.
 - **Fuzzy dates** — "sometime in 2019" is a real answer; precision is stored, not invented.
+- **Undo a delete** — removing a memory offers Undo, and taking it means the same memory comes back with
+  its id, its photos and its place in the story. Nothing is ever hard-deleted, so this is a cleared column
+  rather than a recovery.
 - **Upcoming** — anniversaries and birthdays derived from the couple's own profile, plus future
   plans, with countdowns. Yearly dates are computed on read, so nothing drifts.
 - **Photos** — multiple per memory, re-encoded server side, thumbnails for the timeline, delivered

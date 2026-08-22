@@ -68,7 +68,7 @@ async function copy(value: string, message: string): Promise<void> {
       </button>
       <div class="mt-3 flex gap-2">
         <AppButton variant="primary" icon="link" block @click="share">Share the link</AppButton>
-        <AppButton variant="ghost" icon="copy" @click="copy(link, 'Invite link copied')" />
+        <AppButton variant="ghost" icon="copy" aria-label="Copy the invite link" @click="copy(link, 'Invite link copied')" />
       </div>
       <p class="mt-2.5 text-center text-[0.75rem] text-muted">
         Expires in 14 days · <button class="underline hover:text-ink" @click="generate">make a new one</button>

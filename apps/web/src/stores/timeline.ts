@@ -143,6 +143,21 @@ export const useTimelineStore = defineStore('timeline', () => {
   }
 
   /**
+   * Put back a memory this session deleted. The row was only soft-deleted, so this is a restore
+   * rather than a re-create: the same id, the same photos, the same place in the story.
+   */
+  async function restore(id: string): Promise<TimelineEvent> {
+    const { event } = await api.post<{ event: TimelineEvent }>(`/events/${id}/restore`, {});
+    const before = events.value.length;
+    absorb(event);
+    // absorb() keeps a future-dated memory out of the story scroll, so the count follows what
+    // actually landed rather than assuming a restore always puts a row back on screen.
+    total.value = Math.max(0, total.value + (events.value.length - before));
+    await Promise.all([refreshSummary(), loadUpcoming()]);
+    return event;
+  }
+
+  /**
    * Re-read exactly the window that is already on screen. Used when the change stream was asleep —
    * a phone in a pocket suspends it — so catching up does not mean snapping the reader back to the
    * top of the story. Capped at the endpoint's own maximum page.
@@ -242,7 +257,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     events, upcoming, summary, total, loading, loadingMore, loaded,
     activeTypes, activeYear, order, hasMore, isFiltered, grouped,
     load, loadMore, loadUpcoming, toggleType, setYear, setOrder, clearFilters,
-    create, update, remove, addPhotos, removePhoto, fetchOne, byId, reset, refreshSummary,
+    create, update, remove, restore, addPhotos, removePhoto, fetchOne, byId, reset, refreshSummary,
     applyRemote, refresh,
   };
 });

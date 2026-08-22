@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useTimelineStore } from '@/stores/timeline';
 import { useUiStore } from '@/stores/ui';
+import { storyLayoutMeta } from '@/lib/storyLayouts';
 import { themeMeta } from '@/lib/themes';
 import Avatar from './ui/Avatar.vue';
 import EventForm from './EventForm.vue';
@@ -24,6 +25,7 @@ const tabs = computed(() => [
 ]);
 
 const currentTheme = computed(() => themeMeta(auth.couple?.theme));
+const currentLayout = computed(() => storyLayoutMeta(auth.couple?.storyLayout));
 
 const title = computed(() => auth.couple?.title || auth.displayNames.join(' & ') || 'Our story');
 
@@ -55,6 +57,18 @@ function onSaved(): void {
       <span class="flex-1" />
 
       <InstallButton />
+      <!--
+        Both galleries, not just the colours. The shape of the story is the bigger of the two
+        decisions and it was two taps deeper than the palette — reachable only from Us.
+      -->
+      <RouterLink
+        :to="{ name: 'story' }"
+        class="btn btn-quiet h-9 w-9 shrink-0 rounded-full p-0"
+        aria-label="Story shape"
+        :title="`Shape: ${currentLayout.label}`"
+      >
+        <FaIcon icon="sort" />
+      </RouterLink>
       <RouterLink
         :to="{ name: 'themes' }"
         class="btn btn-quiet h-9 w-9 shrink-0 rounded-full p-0"

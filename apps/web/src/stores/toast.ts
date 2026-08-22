@@ -32,11 +32,21 @@ export const useToastStore = defineStore('toast', () => {
     push(message, 'neutral', 0, { label, run });
   }
 
+  /**
+   * A take-it-back toast. Longer than the usual 3.6s because the reader has to notice it, read it
+   * and decide, but not indefinite: an Undo that is still on screen a minute later is clutter, and
+   * the delete it undoes is soft anyway.
+   */
+  function undo(message: string, run: () => void): void {
+    push(message, 'neutral', 9000, { label: 'Undo', run });
+  }
+
   return {
     toasts,
     push,
     dismiss,
     prompt,
+    undo,
     warm: (m: string) => push(m, 'warm'),
     error: (m: string) => push(m, 'error', 5200),
   };

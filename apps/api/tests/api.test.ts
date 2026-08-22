@@ -327,6 +327,45 @@ describe('timeline ordering and scope', () => {
     assert.equal((await call(user, 'GET', `/api/events/${id}`)).status, 404);
     assert.equal((await call(user, 'GET', '/api/events?scope=all')).body.total, 0);
   });
+
+  it('puts a deleted memory back, with its id and its photos, and stays idempotent', async () => {
+    const user = await signup('Undoer');
+    await call(user, 'POST', '/api/couples', {});
+    const created = await call(user, 'POST', '/api/events', {
+      type: 'trip',
+      title: 'Almost lost',
+      eventDate: '2024-03-04',
+      location: 'Antsirabe',
+      tags: ['train'],
+    });
+    const id = created.body.event.id;
+
+    assert.equal((await call(user, 'DELETE', `/api/events/${id}`)).status, 204);
+
+    // Restore, not re-create: the same id comes back, and so does everything hanging off it. A
+    // restore that minted a new row would orphan the photos and break any link to the memory.
+    const back = await call(user, 'POST', `/api/events/${id}/restore`);
+    assert.equal(back.status, 200);
+    assert.equal(back.body.event.id, id);
+    assert.equal(back.body.event.title, 'Almost lost');
+    assert.equal(back.body.event.location, 'Antsirabe');
+    assert.deepEqual(back.body.event.tags, ['train']);
+
+    assert.equal((await call(user, 'GET', `/api/events/${id}`)).status, 200);
+    assert.equal((await call(user, 'GET', '/api/events?scope=all')).body.total, 1);
+
+    // Tapping Undo twice, or both partners undoing the same delete, must not 404.
+    assert.equal((await call(user, 'POST', `/api/events/${id}/restore`)).status, 200);
+
+    // And the counters the filter chips are built from have to agree that it is back.
+    const summary = await call(user, 'GET', '/api/events/summary');
+    assert.equal(summary.body.types.trip, 1);
+
+    // An id that was never theirs stays a 404, restore included.
+    const outsider = await signup('NotYours');
+    await call(outsider, 'POST', '/api/couples', {});
+    assert.equal((await call(outsider, 'POST', `/api/events/${id}/restore`)).status, 404);
+  });
 });
 
 describe('upcoming dates', () => {
@@ -388,6 +427,7 @@ describe('photos and couple isolation', () => {
     assert.equal((await call(outsider, 'PATCH', `/api/events/${eventId}`, { title: 'Mine now' })).status, 404);
     assert.equal((await call(outsider, 'DELETE', `/api/events/${eventId}`)).status, 404);
     assert.equal((await call(outsider, 'DELETE', `/api/events/${eventId}/photos/${photoId}`)).status, 404);
+    assert.equal((await call(outsider, 'POST', `/api/events/${eventId}/restore`)).status, 404);
 
     // Anonymous callers get nowhere near it.
     assert.equal((await fetch(`${base}/api/photos/${photoId}`)).status, 401);

@@ -25,11 +25,18 @@ const edited = computed(
 
 async function remove(): Promise<void> {
   if (!props.event) return;
+  const { id, title } = props.event;
   working.value = true;
   try {
-    await timeline.remove(props.event.id);
-    toasts.push('Memory removed');
+    await timeline.remove(id);
+    // The id is captured above on purpose: the sheet closes on the next line and `props.event`
+    // becomes null, so the toast cannot reach for it when the reader finally taps Undo.
     emit('close');
+    // Titles run to 140 characters; a toast is one line.
+    const short = title.length > 32 ? `${title.slice(0, 31).trimEnd()}…` : title;
+    toasts.undo(`Removed “${short}”`, () => {
+      void timeline.restore(id).catch(() => toasts.error('Could not put that back'));
+    });
   } catch {
     toasts.error('That did not delete');
   } finally {
@@ -94,7 +101,7 @@ async function remove(): Promise<void> {
         <AppButton variant="primary" :loading="working" icon="trash-can" @click="remove">Remove</AppButton>
       </div>
       <div v-else class="flex items-center gap-2">
-        <AppButton variant="quiet" icon="trash-can" @click="confirming = true" />
+        <AppButton variant="quiet" icon="trash-can" aria-label="Delete this memory" @click="confirming = true" />
         <span class="flex-1" />
         <AppButton variant="ghost" icon="pen" @click="event && emit('edit', event)">Edit</AppButton>
         <AppButton variant="primary" @click="emit('close')">Close</AppButton>

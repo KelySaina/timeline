@@ -268,6 +268,28 @@ export async function softDeleteEvent(coupleId: string, eventId: string): Promis
   if (rows.length === 0) throw notFound('That memory is not in your timeline');
 }
 
+/**
+ * Undo a delete. Nothing here is recovered from a backup: the row never left, its photos never
+ * left, and clearing `deleted_at` is the whole operation.
+ *
+ * Deliberately not time-boxed. A window would have to be either generous enough to be pointless as
+ * a safeguard or short enough to fail on a slow phone, and there is nothing to protect against —
+ * the row belongs to this couple, they are the only ones who can name its id, and nothing purges
+ * it. The undo affordance is what expires, not the ability to restore.
+ */
+export async function restoreEvent(coupleId: string, eventId: string): Promise<TimelineEvent> {
+  await query(
+    `update events set deleted_at = null, updated_at = now()
+      where id = $2 and couple_id = $1 and deleted_at is not null`,
+    [coupleId, eventId],
+  );
+  // Updating no row is not a failure: it means the memory is already back — two taps of Undo, or
+  // both partners undoing the same delete. getEvent supplies the 404 for an id that was never
+  // theirs, which is the only case that should fail, and it applies the couple check on the read
+  // path exactly as every other read does.
+  return getEvent(coupleId, eventId);
+}
+
 export async function addPhotos(
   coupleId: string,
   userId: string,
