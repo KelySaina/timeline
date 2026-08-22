@@ -35,10 +35,19 @@ done
 # rather than here — so it is checked before anything is written. Catches a placeholder pasted in
 # whole, which is the way this actually goes wrong.
 case "$SUBJECT" in
-  mailto:*@*.*) ;;
-  https://*.*) ;;
+  mailto:*@*.*|https://*.*) ;;
   *) echo "VAPID_SUBJECT '$SUBJECT' is not a usable contact URI." >&2
-     echo "Pass a real one:  --subject=mailto:you@example.com" >&2
+     echo "It has to be an address that can receive mail, or an https:// URL." >&2
+     exit 2 ;;
+esac
+
+# RFC 2606 reserves these so they can appear in documentation — which is exactly why they end up
+# pasted into a real .env. Well-formed and unreachable is the worst combination here: a push service
+# accepts it and then has no way to contact whoever runs this.
+case "$SUBJECT" in
+  *@example.com|*@example.net|*@example.org|*@example.edu|*//example.*|*your-domain*|*@localhost|*.invalid|*.test)
+     echo "VAPID_SUBJECT '$SUBJECT' uses a reserved documentation domain." >&2
+     echo "Use an address that can actually reach you." >&2
      exit 2 ;;
 esac
 

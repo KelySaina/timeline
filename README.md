@@ -343,8 +343,11 @@ The next deploy carries the keys forward on its own: `.env` is gitignored, so th
 and `setup.sh` preserves whatever is already there.
 
 `VAPID_SUBJECT` is a contact address for whoever runs the deployment, sent to the push service on
-every request. Both the script and the API refuse a placeholder: a malformed one is rejected by the
-push service at *send* time, which for a reminder is next week rather than now. If the keys are
+every request. Both the script and the API refuse a placeholder — including a well-formed one at a
+domain RFC 2606 reserves for documentation (`me@example.com`), which is the harder case: nothing
+about its shape is wrong, a push service accepts it, and then there is no way to reach you. A
+malformed one is worse in a different way — the push service rejects it at *send* time, which for a
+reminder is next week rather than now. If the keys are
 present but the subject is unusable the API still boots — it says so in the log and leaves
 notifications off, because taking every screen down over a feature nobody has switched on is the
 wrong trade.

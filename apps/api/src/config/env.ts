@@ -65,12 +65,22 @@ export const isProd = env.NODE_ENV === 'production';
  * service on every request. A push service rejects a malformed one, so a typo here means every
  * notification fails — but not until one is actually sent, which for a reminder could be next week.
  *
- * Checked shallowly and on purpose: enough to catch a placeholder pasted in verbatim — neither
- * 'mailto:YOUR_REAL_EMAIL' nor 'mailto:you@your-domain' survives it — and not enough to argue with
- * anyone about what an address may contain.
+ * Two separate checks, because there are two ways this goes wrong in practice and only the first
+ * one looks wrong. `mailto:YOUR_REAL_EMAIL` is obviously broken. `mailto:me@example.com` is a
+ * perfectly well-formed address at a domain reserved by RFC 2606 precisely so that it can appear in
+ * documentation — which means it is exactly what gets pasted out of documentation, and nothing about
+ * its shape gives it away.
  */
-const usableSubject = (value: string): boolean =>
-  /^mailto:[^\s@]+@[^\s@.]+\.[^\s@.]+/.test(value) || /^https:\/\/[^\s]+\.[^\s]+/.test(value);
+const RESERVED_DOMAINS =
+  /(^|[@.])(example\.(com|net|org|edu)|your-domain|localhost)$|\.(example|invalid|test|localhost)$/i;
+
+const usableSubject = (value: string): boolean => {
+  const shapedRight =
+    /^mailto:[^\s@]+@[^\s@.]+\.[^\s@.]+/.test(value) || /^https:\/\/[^\s]+\.[^\s]+/.test(value);
+  if (!shapedRight) return false;
+  const host = value.startsWith('mailto:') ? value.slice(value.lastIndexOf('@') + 1) : new URL(value).hostname;
+  return !RESERVED_DOMAINS.test(host);
+};
 
 const hasKeys = Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
 
@@ -88,7 +98,8 @@ export const pushConfigured = hasKeys && usableSubject(env.VAPID_SUBJECT!);
 if (hasKeys && !pushConfigured) {
   console.error(
     `[config] VAPID_SUBJECT is not a usable contact URI (${env.VAPID_SUBJECT}) — notifications are ` +
-      'disabled until it is a real "mailto:someone@example.com" or an https:// URL. Push services ' +
-      'reject anything else, and reject it at send time rather than now.',
+      'disabled until it is an address that can actually receive mail, or an https:// URL. A ' +
+      'reserved documentation domain counts as unusable: a push service would accept it and then ' +
+      'have no way to reach you.',
   );
 }

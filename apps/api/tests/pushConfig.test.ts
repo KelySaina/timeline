@@ -3,8 +3,10 @@
  *
  * Its own file because `config/env.ts` reads the environment once per process, so the only way to
  * test a second configuration is a second process. The case is worth the file: a real deployment
- * ended up with `VAPID_SUBJECT=mailto:YOUR_REAL_EMAIL` — a placeholder pasted in whole — and a push
- * service rejects that at send time, which for a reminder is next week rather than now.
+ * ended up with a placeholder subject pasted in whole, twice — once obviously broken
+ * (`mailto:YOUR_REAL_EMAIL`) and once not (`mailto:me@example.com`) — and a push service rejects the
+ * first at send time, which for a reminder is next week, while accepting the second and having
+ * nowhere to write to.
  *
  * The behaviour under test is the trade: refusing to boot would take every screen of the app down
  * for a feature nobody has switched on, so a bad subject leaves the API running with notifications
@@ -19,8 +21,12 @@ import webpush from 'web-push';
 const keys = webpush.generateVAPIDKeys();
 process.env.VAPID_PUBLIC_KEY = keys.publicKey;
 process.env.VAPID_PRIVATE_KEY = keys.privateKey;
-// Exactly what a server ended up with.
-process.env.VAPID_SUBJECT = 'mailto:YOUR_REAL_EMAIL';
+/*
+ * A well-formed address at a domain RFC 2606 reserves for documentation. The harder of the two
+ * failure modes: it passes every shape check, a push service accepts it, and then there is no way
+ * to reach whoever runs the deployment. It got into a real .env by being pasted out of an example.
+ */
+process.env.VAPID_SUBJECT = 'mailto:me@example.com';
 
 const { createApp } = await import('../src/app.js');
 const { pool } = await import('../src/db/pool.js');
