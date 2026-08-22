@@ -9,6 +9,7 @@ import { useToastStore } from '@/stores/toast';
 import { useUiStore } from '@/stores/ui';
 import AppButton from '@/components/ui/AppButton.vue';
 import AppSheet from '@/components/ui/AppSheet.vue';
+import NotificationSetup from '@/components/NotificationSetup.vue';
 import UpcomingEvents from '@/components/UpcomingEvents.vue';
 
 const timeline = useTimelineStore();
@@ -46,6 +47,34 @@ async function addRecurring(): Promise<void> {
   }
 }
 
+/**
+ * How far ahead each date reminds you. A short list rather than a number field: these are the
+ * answers people actually give, and "37 days before" is not one of them.
+ */
+const LEAD_TIMES = [0, 1, 3, 7, 14, 30] as const;
+
+const leadLabel = (days: number): string =>
+  days === 0 ? 'On the day' : days === 1 ? 'A day before' : `${days} days before`;
+
+async function setLeadTime(item: RecurringDate, days: number): Promise<void> {
+  if (days === item.remindDaysBefore) return;
+  // Optimistic: the select has already moved, and snapping it back on a slow network reads as a
+  // bug. The reload below is the correction if the server disagrees.
+  const previous = recurring.value;
+  recurring.value = recurring.value.map((row) =>
+    row.id === item.id ? { ...row, remindDaysBefore: days } : row,
+  );
+  try {
+    const payload = await api.patch<{ recurring: RecurringDate[] }>(`/recurring/${item.id}`, {
+      remindDaysBefore: days,
+    });
+    recurring.value = payload.recurring;
+  } catch {
+    recurring.value = previous;
+    toasts.error('Could not change that reminder');
+  }
+}
+
 async function removeRecurring(item: RecurringDate): Promise<void> {
   try {
     const payload = await api.del<{ recurring: RecurringDate[] }>(`/recurring/${item.id}`);
@@ -75,6 +104,8 @@ async function open(item: UpcomingItem): Promise<void> {
       </p>
     </header>
 
+    <NotificationSetup />
+
     <UpcomingEvents v-if="soon.length" :items="soon" heading="Next 60 days" class="mb-7" @open="open" />
 
     <div v-else class="card-quiet mb-7 px-4 py-6 text-center text-[0.9rem] text-muted">
@@ -91,22 +122,43 @@ async function open(item: UpcomingItem): Promise<void> {
         </button>
       </div>
       <ul class="card divide-y divide-[var(--line)]">
-        <li v-for="item in recurring" :key="item.id" class="flex items-center gap-3 px-4 py-3">
-          <span class="display w-16 shrink-0 text-[0.8125rem] tabular-nums text-muted">
-            {{ monthName(item.month, true) }} {{ item.day }}
-          </span>
-          <span class="min-w-0 flex-1 truncate text-[0.9375rem]">{{ item.title }}</span>
-          <span v-if="!item.editable" class="text-[0.7rem] text-muted">
-            <FaIcon icon="lock" class="mr-1 text-[0.6rem]" />from your profile
-          </span>
-          <button
-            v-else
-            class="btn btn-quiet h-8 w-8 rounded-full p-0"
-            :aria-label="`Remove ${item.title}`"
-            @click="removeRecurring(item)"
-          >
-            <FaIcon icon="trash-can" class="text-[0.75rem]" />
-          </button>
+        <li v-for="item in recurring" :key="item.id" class="px-4 py-3">
+          <div class="flex items-center gap-3">
+            <span class="display w-16 shrink-0 text-[0.8125rem] tabular-nums text-muted">
+              {{ monthName(item.month, true) }} {{ item.day }}
+            </span>
+            <span class="min-w-0 flex-1 truncate text-[0.9375rem]">{{ item.title }}</span>
+            <span v-if="!item.editable" class="shrink-0 text-[0.7rem] text-muted">
+              <FaIcon icon="lock" class="mr-1 text-[0.6rem]" />from your profile
+            </span>
+            <button
+              v-else
+              class="btn btn-quiet h-8 w-8 shrink-0 rounded-full p-0"
+              :aria-label="`Remove ${item.title}`"
+              @click="removeRecurring(item)"
+            >
+              <FaIcon icon="trash-can" class="text-[0.75rem]" />
+            </button>
+          </div>
+          <!--
+            Offered on every date, including the ones drawn from the profile. The date itself is
+            not editable there, but how early it warns you is nobody's business but the couple's —
+            and the anniversary is the one people most want a fortnight's notice of.
+          -->
+          <div class="mt-2 flex items-center gap-2 pl-[4.75rem]">
+            <FaIcon icon="bell" class="shrink-0 text-[0.6rem] text-muted" />
+            <label class="sr-only" :for="`lead-${item.id}`">
+              How far ahead to remind you about {{ item.title }}
+            </label>
+            <select
+              :id="`lead-${item.id}`"
+              class="field !h-7 !w-auto !px-2 !py-0 !text-[0.7rem]"
+              :value="item.remindDaysBefore"
+              @change="setLeadTime(item, Number(($event.target as HTMLSelectElement).value))"
+            >
+              <option v-for="days in LEAD_TIMES" :key="days" :value="days">{{ leadLabel(days) }}</option>
+            </select>
+          </div>
         </li>
         <li v-if="!recurring.length" class="px-4 py-6 text-center text-[0.875rem] text-muted">
           Set your start date and birthdays in <RouterLink :to="{ name: 'profile' }" class="underline">Us</RouterLink>,

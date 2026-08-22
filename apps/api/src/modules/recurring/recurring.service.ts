@@ -132,12 +132,41 @@ async function assertCustom(coupleId: string, id: string): Promise<void> {
   }
 }
 
+/**
+ * What may be changed on a derived row. The date cannot: it mirrors a profile field and is rebuilt
+ * from it, so an edit here would be silently reverted on the next profile save. How far ahead it
+ * reminds you is a different kind of fact — nothing derives it, and it is only useful on exactly
+ * the rows that were previously frozen, since an anniversary is the reminder people most want to
+ * arrive early.
+ */
+async function assertEditable(
+  coupleId: string,
+  id: string,
+  patch: { title?: unknown; month?: unknown; day?: unknown; startYear?: unknown },
+): Promise<void> {
+  const row = await queryOne<{ source: string }>(
+    'select source from recurring_events where id = $1 and couple_id = $2',
+    [id, coupleId],
+  );
+  if (!row) throw notFound('That reminder does not exist');
+  if (row.source === 'custom') return;
+
+  const touchesTheDate =
+    patch.title !== undefined ||
+    patch.month !== undefined ||
+    patch.day !== undefined ||
+    patch.startYear !== undefined;
+  if (touchesTheDate) {
+    throw forbidden('Anniversaries and birthdays follow your profile — change them there');
+  }
+}
+
 export async function updateRecurring(
   coupleId: string,
   id: string,
   patch: { title?: string; month?: number; day?: number; startYear?: number | null; remindDaysBefore?: number },
 ) {
-  await assertCustom(coupleId, id);
+  await assertEditable(coupleId, id, patch);
   await query(
     `update recurring_events
         set title              = coalesce($3, title),

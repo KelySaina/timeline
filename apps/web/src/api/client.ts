@@ -78,7 +78,9 @@ export const api = {
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
-  del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  // A body is unusual on DELETE but correct here: unsubscribing names the push endpoint being
+  // dropped, which is a 400-character URL that has no business in a query string.
+  del: <T>(path: string, body?: unknown) => request<T>(path, { method: 'DELETE', body }),
 };
 
 /** Photos are private: they are fetched with the session cookie, never from a public URL. */

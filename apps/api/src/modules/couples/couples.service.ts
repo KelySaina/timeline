@@ -39,14 +39,32 @@ export async function syncDerivedRecurring(client: PoolClient, coupleId: string)
   const row = couple.rows[0];
   if (!row) return;
 
+  /*
+   * Rebuilding these rows must not throw away the one field on them that is not derived. How far
+   * ahead a reminder arrives is the couple's setting, and a profile save — changing a nickname,
+   * adding a birthday — would otherwise silently reset every lead time to the default.
+   */
+  const kept = await client.query<{ source: string; source_user_id: string | null; remind_days_before: number }>(
+    "select source, source_user_id, remind_days_before from recurring_events where couple_id = $1 and source <> 'custom'",
+    [coupleId],
+  );
+  // Matches recurring_events.remind_days_before's own default in 001; only ever used the first
+  // time a derived row is created, when there is no previous setting to carry over.
+  const DEFAULT_REMIND_DAYS = 7;
+  const leadTime = (source: string, userId: string | null): number =>
+    kept.rows.find((row) => row.source === source && row.source_user_id === userId)?.remind_days_before ??
+    DEFAULT_REMIND_DAYS;
+
   await client.query("delete from recurring_events where couple_id = $1 and source <> 'custom'", [coupleId]);
 
   if (row.started_on) {
     const [year, month, day] = row.started_on.split('-').map(Number);
     await client.query(
-      `insert into recurring_events (couple_id, kind, title, month, day, start_year, source, created_by)
-       values ($1, 'anniversary', $2, $3, $4, $5, 'couple_anniversary', $6)`,
-      [coupleId, 'Our anniversary', month, day, year, row.created_by],
+      `insert into recurring_events
+         (couple_id, kind, title, month, day, start_year, source, created_by, remind_days_before)
+       values ($1, 'anniversary', $2, $3, $4, $5, 'couple_anniversary', $6,
+               $7)`,
+      [coupleId, 'Our anniversary', month, day, year, row.created_by, leadTime('couple_anniversary', null)],
     );
   }
 
@@ -62,8 +80,10 @@ export async function syncDerivedRecurring(client: PoolClient, coupleId: string)
     const [, month, day] = member.birthday.split('-').map(Number);
     await client.query(
       `insert into recurring_events
-         (couple_id, kind, title, month, day, start_year, source, source_user_id, created_by)
-       values ($1, 'birthday', $2, $3, $4, $5, 'member_birthday', $6, $6)`,
+         (couple_id, kind, title, month, day, start_year, source, source_user_id, created_by,
+          remind_days_before)
+       values ($1, 'birthday', $2, $3, $4, $5, 'member_birthday', $6, $6,
+               $7)`,
       [
         coupleId,
         `${member.display_name}'s birthday`,
@@ -71,6 +91,7 @@ export async function syncDerivedRecurring(client: PoolClient, coupleId: string)
         day,
         Number(member.birthday.split('-')[0]),
         member.user_id,
+        leadTime('member_birthday', member.user_id),
       ],
     );
   }

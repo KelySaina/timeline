@@ -11,9 +11,13 @@
  *   /assets/*   content-hashed, so cache-first forever; a new build asks for new filenames.
  *   navigation  network-first, falling back to the cached shell so an offline launch opens the app
  *               instead of the browser's error page.
+ *
+ * It also receives push. A notification is shown for every push that arrives, without exception:
+ * every browser that supports web push requires a user-visible notification per message, and a
+ * silent one costs the site its permission.
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = `timeline-shell-${VERSION}`;
 const STATIC = `timeline-static-${VERSION}`;
 const SHELL_URL = '/index.html';
@@ -96,4 +100,63 @@ self.addEventListener('fetch', (event) => {
 
   // Icons, the manifest, favicons: cache when present, network otherwise.
   event.respondWith(caches.match(request).then((hit) => hit ?? fetch(request)));
+});
+
+/* ---------------------------------------------------------------------------------------------
+ * Push
+ * ------------------------------------------------------------------------------------------ */
+
+/**
+ * The payload is encrypted end to end and written by our own API, but it is still parsed
+ * defensively: a push that arrives malformed — or with no body at all, which some services do when
+ * they cannot carry one — must still show something rather than throw and show nothing.
+ */
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+
+  const title = typeof data.title === 'string' && data.title ? data.title : 'Timeline';
+  const url = typeof data.url === 'string' && data.url.startsWith('/') ? data.url : '/';
+
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: typeof data.body === 'string' ? data.body : '',
+      // Collapse on the tag the server chose, so a phone coming back online after several delivery
+      // attempts shows one reminder rather than a stack of identical ones.
+      tag: typeof data.tag === 'string' ? data.tag : undefined,
+      renotify: false,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      // Read back on click. Same-origin paths only — checked above, because this value decides
+      // where a tap navigates.
+      data: { url },
+    }),
+  );
+});
+
+/**
+ * Focus the app if it is already open rather than opening a second window, and take it to the
+ * screen the notification was about. `navigate()` is not available in every browser, so a failure
+ * there still leaves the reader in a focused app.
+ */
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url ?? '/';
+
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of windows) {
+        if (new URL(client.url).origin !== self.location.origin) continue;
+        await client.focus();
+        if ('navigate' in client) await client.navigate(url).catch(() => undefined);
+        return;
+      }
+      await self.clients.openWindow(url);
+    })(),
+  );
 });

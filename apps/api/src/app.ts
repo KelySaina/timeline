@@ -10,6 +10,7 @@ import { authRouter } from './modules/auth/auth.routes.js';
 import { couplesRouter } from './modules/couples/couples.routes.js';
 import { eventsRouter, searchRouter } from './modules/events/events.routes.js';
 import { photosRouter } from './modules/photos/photos.routes.js';
+import { pushRouter } from './modules/push/push.routes.js';
 import { realtimeRouter } from './modules/realtime/realtime.routes.js';
 import { upcomingRouter } from './modules/recurring/recurring.routes.js';
 
@@ -33,7 +34,17 @@ export function createApp() {
 
   const api = express.Router();
   api.use(loadSession, loadCouple);
-  api.use(authRouter, couplesRouter, eventsRouter, searchRouter, upcomingRouter, photosRouter, realtimeRouter);
+  /*
+   * Order matters here, and not only for path precedence. Several of these routers apply
+   * `requireCouple` to their whole stack (eventsRouter, searchRouter, upcomingRouter), and a
+   * pathless `router.use()` runs for every request that reaches it — including requests they will
+   * never handle. So anything that must work *without* a relationship has to be mounted ahead of
+   * them, or a signed-up user with no couple gets a 403 from a router they were only passing
+   * through. Push is one of those: the browser asks whether notifications are possible before
+   * there is anyone to be reminded about.
+   */
+  api.use(authRouter, couplesRouter, pushRouter);
+  api.use(eventsRouter, searchRouter, upcomingRouter, photosRouter, realtimeRouter);
   app.use('/api', api);
 
   app.use(notFoundHandler);

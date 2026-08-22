@@ -258,6 +258,9 @@ sitting in a cache that survives sign-out. Offline gets you the shell and a fail
   photos, profiles and upcoming dates.
 - **Installable** — a real home-screen app: standalone window, themed status bar, an "Add a memory"
   shortcut, and a shell that opens offline instead of a browser error page.
+- **Reminders that leave the app** — a push notification before an anniversary or birthday, at nine
+  in the morning where you actually are, as far ahead as you asked for. Per device, opt-in, and off
+  by default.
 - **Six ways to read it** — the story itself is drawn six ways, picked from a gallery like the
   themes are: the original **rail**, a **winding road** whose bends tighten where memories cluster,
   a **route map** where places become stations and trips become spurs, an **album** laying each year
@@ -290,11 +293,41 @@ sitting in a cache that survives sign-out. Offline gets you the shell and a fail
 `npm test` covers the ordering guarantees and the isolation ones: a second couple holding real event
 and photo ids gets 404s on read, write, and delete.
 
+## Reminders (web push)
+
+`recurring_events.remind_days_before` has been stored and editable since the first migration and
+sent nothing. It sends now.
+
+- **A notification at 9am local, as far ahead as each date says.** Every yearly date carries its own
+  lead time — on the day, a day before, up to a month — and the anniversary is editable too, even
+  though its date is derived from the profile.
+- **Local, not UTC.** "Seven days before" is a sentence about a calendar, so the comparison runs in
+  the recipient's own date from an IANA zone stored per user — partners travel apart. The browser
+  reports the zone when notifications are switched on; nobody is asked to pick one from a list.
+- **Nobody is reminded of their own birthday.** Their partner is.
+- **Every replica can run the scheduler.** There is no leader election and no lock: each send is
+  claimed by an `insert into reminder_sends` before it is attempted, so a second replica — or a
+  redeploy mid-tick — loses on the primary key and sends nothing. The key names the *occurrence*, so
+  the same anniversary is claimable again next year.
+- **Per browser, not per account.** The switch reflects the device you are looking at, and each one
+  is turned on separately. A dead endpoint (404/410 from the push service) is deleted on the spot.
+- **The card names the actual obstacle.** Not supported, no worker, needs installing first (iOS),
+  server has no keys, permission denied, off, on — six different sentences, and a button only where
+  a tap can do something.
+
+Push is **optional**: with no `VAPID_*` keys in `.env` the app boots and behaves exactly as before
+and the switch is replaced by a line saying so. To turn it on:
+
+```bash
+./scripts/vapid-keys.sh --write     # or just re-run ./setup.sh, which generates a pair
+docker compose up -d --force-recreate api
+```
+
+Rotating the pair signs every device out of notifications — a browser binds its subscription to the
+key it was created with — so `setup.sh --rotate` deliberately leaves these alone.
+
 ## Not built yet (by design)
 
-AI recaps, "on this day", bucket lists, exports, print, video and voice memories, push
-notifications, sharing. `docs/DESIGN.md` §8 records where each one attaches.
-
-`recurring_events.remind_days_before` is stored and editable but nothing sends anything yet: the
-service worker that landed with the PWA is the delivery channel that was missing, so push is now a
-subscription table and a scheduler away rather than a from-scratch build.
+AI recaps, "on this day", bucket lists, exports, print, video and voice memories, sharing, and
+notifications for anything other than yearly dates (a partner adding a memory, a plan coming up).
+`docs/DESIGN.md` §8 records where each one attaches.

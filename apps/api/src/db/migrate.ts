@@ -5,10 +5,24 @@ import { pool } from './pool.js';
 
 const migrationsDir = fileURLToPath(new URL('../../migrations/', import.meta.url));
 
+/**
+ * Arbitrary, constant, and ours. Session-scoped advisory locks share one namespace per database, so
+ * the only requirement is that nothing else picks the same number.
+ */
+const MIGRATION_LOCK = 8274193004115;
+
 export async function migrate(): Promise<string[]> {
   const client = await pool.connect();
   const applied: string[] = [];
   try {
+    /*
+     * One migrator at a time. The API is meant to run as more than one replica and they boot
+     * together, and the test suite runs each file in its own process against one database — so
+     * without this two of them read the same "not applied yet", both run the file, and the loser
+     * fails on `column already exists` instead of seeing it as already done. Taken before the
+     * bookkeeping table is even created, because that races too.
+     */
+    await client.query('select pg_advisory_lock($1)', [MIGRATION_LOCK]);
     await client.query(`
       create table if not exists schema_migrations (
         name       text primary key,
@@ -37,6 +51,9 @@ export async function migrate(): Promise<string[]> {
     if (applied.length === 0) console.log('[migrate] already up to date');
     return applied;
   } finally {
+    // Released explicitly rather than left to the connection closing: this client goes back to the
+    // pool, and a session-scoped lock would ride along with it.
+    await client.query('select pg_advisory_unlock($1)', [MIGRATION_LOCK]).catch(() => undefined);
     client.release();
   }
 }

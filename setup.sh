@@ -127,6 +127,30 @@ gen_secret() { # gen_secret <length>
   printf '\n'
 }
 
+# A VAPID keypair for web push: an ordinary P-256 pair in base64url. Sets VAPID_PUBLIC_KEY and
+# VAPID_PRIVATE_KEY, or leaves both empty when it cannot — push is optional everywhere, so a host
+# without openssl gets an app that simply does not offer notifications rather than a failed setup.
+gen_vapid() {
+  VAPID_PUBLIC_KEY=""
+  VAPID_PRIVATE_KEY=""
+  have openssl || return 0
+  local tmp priv pub
+  tmp="$(mktemp -d)"
+  openssl ecparam -genkey -name prime256v1 -noout -out "$tmp/k.pem" 2>/dev/null || { rm -rf "$tmp"; return 0; }
+  # Fixed offsets in the DER encodings: the 32-byte scalar after the SEC1 header, and the 65-byte
+  # 0x04||X||Y point after the SPKI algorithm identifier.
+  priv="$(openssl ec -in "$tmp/k.pem" -outform DER 2>/dev/null |
+    dd bs=1 skip=7 count=32 status=none | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+  pub="$(openssl ec -in "$tmp/k.pem" -pubout -outform DER 2>/dev/null |
+    dd bs=1 skip=26 count=65 status=none | base64 -w0 | tr '+/' '-_' | tr -d '=')"
+  rm -rf "$tmp"
+  # Wrong lengths mean this openssl laid the DER out differently; empty keys are safe, wrong ones
+  # would fail silently at send time on every device.
+  [ "${#priv}" -eq 43 ] && [ "${#pub}" -eq 87 ] || return 0
+  VAPID_PRIVATE_KEY="$priv"
+  VAPID_PUBLIC_KEY="$pub"
+}
+
 read_env_value() { # read_env_value <KEY>
   [ -f "$ENV_FILE" ] || return 0
   sed -n "s/^$1=//p" "$ENV_FILE" | tail -n1
@@ -267,6 +291,21 @@ resolve_secret SESSION_SECRET 64;       SESSION_SECRET="$RESOLVED"
 resolve_secret MINIO_ROOT_PASSWORD 40;  MINIO_ROOT_PASSWORD="$RESOLVED"
 resolve_secret S3_SECRET_ACCESS_KEY 40; S3_SECRET_ACCESS_KEY="$RESOLVED"
 
+# Web push keys are carried over verbatim, and generated only when absent. Deliberately NOT
+# rotated by --rotate: a browser binds its subscription to the public key it was created with, so a
+# new pair silently stops every existing device receiving anything until each turns notifications
+# on again. Nothing about these keys grants access to the couple's data.
+VAPID_PUBLIC_KEY="$(read_env_value VAPID_PUBLIC_KEY)"
+VAPID_PRIVATE_KEY="$(read_env_value VAPID_PRIVATE_KEY)"
+VAPID_SUBJECT="$(read_env_value VAPID_SUBJECT)"
+if [ -z "$VAPID_PUBLIC_KEY" ] || [ -z "$VAPID_PRIVATE_KEY" ]; then
+  gen_vapid
+fi
+if [ -z "$VAPID_SUBJECT" ] && [ -n "$VAPID_PUBLIC_KEY" ]; then
+  # Who a push service should contact about this deployment; never shown to anyone using the app.
+  VAPID_SUBJECT="mailto:admin@${DOMAIN:-localhost}"
+fi
+
 for key in POSTGRES_PASSWORD SESSION_SECRET MINIO_ROOT_PASSWORD S3_SECRET_ACCESS_KEY; do
   case " $WEAK_KEYS " in
     *" $key "*) warn "$key is still a placeholder" ;;
@@ -337,6 +376,13 @@ MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD
 S3_BUCKET=$S3_BUCKET
 S3_ACCESS_KEY_ID=$S3_ACCESS_KEY_ID
 S3_SECRET_ACCESS_KEY=$S3_SECRET_ACCESS_KEY
+
+# --- notifications (web push) ---
+# Optional: with these empty the app runs as before and hides the notifications switch. Replacing
+# them signs every device out of notifications, so they are preserved across runs and never rotated.
+VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY
+VAPID_PRIVATE_KEY=$VAPID_PRIVATE_KEY
+VAPID_SUBJECT=$VAPID_SUBJECT
 
 # --- routing ---
 # Hostname Traefik routes to this app (docker-compose.prod.yml). Empty = no proxy.

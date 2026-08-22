@@ -233,7 +233,14 @@ of root credentials.
 | --- | --- | --- |
 | Postgres + hand-written SQL migrations | Explicit relational model, zero codegen surprises, portable | Add migrations; swap in an ORM later if it earns its place |
 | `DATE` + `date_precision`, never timestamps for events | A memory belongs to a day, not an instant | Optional `event_time` column |
-| Recurrences computed on read from `(month, day)` | No cron, no drift, correct across DST and leap years | Job that turns the same computation into notifications |
+| Recurrences computed on read from `(month, day)` | No cron, no drift, correct across DST and leap years | The reminder scheduler reuses exactly this computation |
+| Reminders gated on the recipient's local hour, from an IANA zone on `users` | "Seven days before" is a claim about a calendar, not an instant, and partners travel apart | A per-person send hour is one column away |
+| The scheduler runs in every replica, with no lock | The claim is a row: `insert into reminder_sends` before the send, so the primary key is the concurrency control | The same pattern covers any future scheduled send |
+| The claim key names the occurrence, not the row | An id-only key would fire once and never again | — |
+| A failed delivery releases its claim | Holding it would lose the reminder silently; releasing lets a later tick in the same hour retry | Nothing retries across hours, on purpose |
+| VAPID keys optional, all three or none | A deployment whose `.env` predates push must boot and hide the feature, not refuse to start; half-configured is a typo worth failing on | — |
+| Push state answered per endpoint, not per user | A subscribed phone says nothing about the laptop asking | — |
+| `remind_days_before` editable on derived rows, the date not | Nothing derives the lead time, and the anniversary is the reminder people most want early — but the date mirrors a profile field and is rebuilt from it | `syncDerivedRecurring` carries the lead time across the rebuild |
 | Session in httpOnly cookie + CSRF double-submit | No token in JS ⇒ XSS can't exfiltrate the session | `token_version` already allows global revoke |
 | `couple_id` from session only | Removes the entire class of IDOR bugs | Any new couple-scoped table inherits it |
 | Photos in MinIO behind a storage driver | Shared by several API replicas, backed up and mirrored with `mc`; identical API for S3/R2 later | The `local` driver stays for single-host runs |

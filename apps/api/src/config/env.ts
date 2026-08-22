@@ -24,7 +24,25 @@ const schema = z.object({
     .string()
     .optional()
     .transform((v) => v !== 'false'),
+
+  // Web push. All three optional together: a deploy whose .env predates push must boot and simply
+  // not offer it, rather than refuse to start. `scripts/vapid-keys.sh` prints a pair.
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  // Who a push service should contact about this application. mailto: or https:.
+  VAPID_SUBJECT: z.string().optional(),
 }).superRefine((value, ctx) => {
+  // Push is all three keys or none of them. Half-configured is almost always a typo, and silently
+  // disabling notifications because one line is misspelled is the wrong failure.
+  const vapid = ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT'] as const;
+  if (vapid.some((key) => value[key])) {
+    for (const key of vapid) {
+      if (!value[key]) {
+        ctx.addIssue({ code: 'custom', path: [key], message: `${key} is required when any VAPID_* key is set` });
+      }
+    }
+  }
+
   if (value.STORAGE_DRIVER !== 's3') return;
   for (const key of ['S3_ENDPOINT', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
     if (!value[key]) {
@@ -41,3 +59,11 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 export const isProd = env.NODE_ENV === 'production';
+
+/**
+ * Whether this deployment can send push at all. Everything push-related checks this rather than
+ * the keys: an install whose .env has no VAPID pair is a normal, supported state — the endpoints
+ * say so honestly and the SPA hides the affordance — not a broken one.
+ */
+export const pushConfigured =
+  Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
