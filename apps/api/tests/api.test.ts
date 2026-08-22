@@ -317,6 +317,42 @@ describe('timeline ordering and scope', () => {
     assert.equal(miss.body.total, 0);
   });
 
+  it('folds accents and matches every word separately', async () => {
+    const user = await signup('Searcher');
+    await call(user, 'POST', '/api/couples', {});
+    await call(user, 'POST', '/api/events', {
+      type: 'trip', title: 'The train', eventDate: '2022-04-02', location: 'Antsirabé', tags: ['rail'],
+    });
+    await call(user, 'POST', '/api/events', {
+      type: 'memory', title: 'Crêpes', eventDate: '2025-02-14',
+      description: 'Made a mess of the première fournée.',
+    });
+
+    const titles = async (q: string): Promise<string[]> => {
+      const result = await call(user, 'GET', `/api/search?q=${encodeURIComponent(q)}`);
+      assert.equal(result.status, 200, q);
+      return (result.body.events as { title: string }[]).map((e) => e.title).sort();
+    };
+
+    // Both directions. Neither spelling used to find the other, which for a timeline full of
+    // Malagasy and French place names meant failing on the words it exists for.
+    assert.deepEqual(await titles('antsirabe'), ['The train']);
+    assert.deepEqual(await titles('Antsirabé'), ['The train']);
+    assert.deepEqual(await titles('crepes'), ['Crêpes']);
+    assert.deepEqual(await titles('CRÊPES'), ['Crêpes']);
+    // Accents inside a description, not just the indexed-looking fields.
+    assert.deepEqual(await titles('premiere'), ['Crêpes']);
+
+    // Every word has to appear, but not together and not in the same field: this is a title word
+    // and a location word. As one substring the query matched nothing at all.
+    assert.deepEqual(await titles('antsirabe train'), ['The train']);
+    assert.deepEqual(await titles('train antsirabe'), ['The train'], 'word order is not significant');
+    // Tags still count as somewhere a word can appear.
+    assert.deepEqual(await titles('rail antsirabe'), ['The train']);
+    // And words that share no memory find none, rather than falling back to either one.
+    assert.deepEqual(await titles('antsirabe crepes'), []);
+  });
+
   it('soft-deletes a memory out of the timeline', async () => {
     const user = await signup('Deleter');
     await call(user, 'POST', '/api/couples', {});

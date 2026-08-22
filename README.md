@@ -245,6 +245,9 @@ sitting in a cache that survives sign-out. Offline gets you the shell and a fail
 - **Add a memory in seconds** — date → type → title → save. Story, photos, place, mood and tags are
   one tap away and always optional.
 - **Fuzzy dates** — "sometime in 2019" is a real answer; precision is stored, not invented.
+- **Search that survives accents** — "antsirabe" finds Antsirabé and the other way round, and each
+  word is matched on its own, so "paris train" finds a memory called *The train* that happened in
+  Paris. Titles, stories, places and tags.
 - **Undo a delete** — removing a memory offers Undo, and taking it means the same memory comes back with
   its id, its photos and its place in the story. Nothing is ever hard-deleted, so this is a cleared column
   rather than a recovery.

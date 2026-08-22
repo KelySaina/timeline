@@ -233,6 +233,8 @@ of root credentials.
 | --- | --- | --- |
 | Postgres + hand-written SQL migrations | Explicit relational model, zero codegen surprises, portable | Add migrations; swap in an ORM later if it earns its place |
 | `DATE` + `date_precision`, never timestamps for events | A memory belongs to a day, not an instant | Optional `event_time` column |
+| Search folds accents with `unaccent`, and ANDs the words | Two spellings of one place are one place, and people type two words expecting both to count | Full-text search or trigram ranking, if relevance ever beats chronology |
+| No index on `unaccent(...)` | It is STABLE, not IMMUTABLE, and an index needs a wrapper that lies about that — which silently disagrees with the data after a dictionary change | A couple's timeline is thousands of rows at the outside |
 | Recurrences computed on read from `(month, day)` | No cron, no drift, correct across DST and leap years | The reminder scheduler reuses exactly this computation |
 | Reminders gated on the recipient's local hour, from an IANA zone on `users` | "Seven days before" is a claim about a calendar, not an instant, and partners travel apart | A per-person send hour is one column away |
 | The scheduler runs in every replica, with no lock | The claim is a row: `insert into reminder_sends` before the send, so the primary key is the concurrency control | The same pattern covers any future scheduled send |

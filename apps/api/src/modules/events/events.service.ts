@@ -86,12 +86,30 @@ export async function listEvents(
     where.push(`extract(year from e.event_date) = $${params.length}`);
   }
   if (filters.q) {
-    params.push(`%${filters.q}%`);
-    const p = `$${params.length}`;
-    where.push(`(
-      e.title ilike ${p} or e.description ilike ${p} or e.location ilike ${p}
-      or exists (select 1 from event_tags t where t.event_id = e.id and t.tag ilike ${p})
-    )`);
+    /*
+     * Every word has to appear somewhere, in any of the fields — so "paris train" finds a memory
+     * called "The train" that happened in Paris. One substring across the whole query could not:
+     * it looked for the literal phrase "paris train" and found nothing, which is the shape of a
+     * search box people give up on.
+     *
+     * Accents are folded on both sides. 'Antsirabe' and 'Antsirabé' are the same place and neither
+     * spelling used to find the other.
+     *
+     * Capped at eight words. Beyond that the query is not a search any more, and each term costs a
+     * scan of the tag table.
+     */
+    for (const term of filters.q.split(/\s+/).filter(Boolean).slice(0, 8)) {
+      params.push(`%${term}%`);
+      const p = `unaccent($${params.length})`;
+      where.push(`(
+        unaccent(e.title) ilike ${p}
+        or unaccent(e.description) ilike ${p}
+        or unaccent(e.location) ilike ${p}
+        or exists (
+          select 1 from event_tags t where t.event_id = e.id and unaccent(t.tag) ilike ${p}
+        )
+      )`);
+    }
   }
 
   const clause = where.join(' and ');
