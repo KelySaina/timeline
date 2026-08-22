@@ -51,9 +51,15 @@ upcomingRouter.patch(
   },
 );
 
+/*
+ * Answers with the remaining list, like the POST and PATCH above it. It used to answer 204, and the
+ * screen that calls it read `payload.recurring` off the empty body: every delete succeeded, threw in
+ * the client, showed "Could not remove that reminder", and left the deleted row on screen — where
+ * clicking it again produced a genuine 404 for a row that really was gone.
+ */
 upcomingRouter.delete('/recurring/:id', verifyCsrf, validate(idParam, 'params'), async (req, res) => {
   const { id } = valid<{ id: string }>(req, 'params');
   await service.deleteRecurring(req.couple!.id, id);
   await notify(req, 'recurring.changed', id);
-  res.status(204).end();
+  res.json({ recurring: await service.listRecurring(req.couple!.id) });
 });

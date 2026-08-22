@@ -369,6 +369,29 @@ describe('timeline ordering and scope', () => {
 });
 
 describe('upcoming dates', () => {
+  it('answers a deleted reminder with the list that is left', async () => {
+    const user = await signup('Reminders');
+    await call(user, 'POST', '/api/couples', { startedOn: '2023-06-01' });
+    const added = await call(user, 'POST', '/api/recurring', { title: 'The day we met', month: 3, day: 12 });
+    assert.equal(added.status, 201);
+    const custom = added.body.recurring.find((r: any) => r.source === 'custom');
+
+    /*
+     * The body matters as much as the status. This answered 204 once, and the screen that calls it
+     * read the list off an empty body: the delete worked, the client threw, and the row it had just
+     * deleted stayed on screen with an error under it.
+     */
+    const removed = await call(user, 'DELETE', `/api/recurring/${custom.id}`);
+    assert.equal(removed.status, 200);
+    assert.ok(Array.isArray(removed.body.recurring), 'the caller needs the remaining list');
+    assert.equal(removed.body.recurring.some((r: any) => r.id === custom.id), false);
+    // The derived anniversary is untouched by deleting a custom date.
+    assert.equal(removed.body.recurring.some((r: any) => r.source === 'couple_anniversary'), true);
+
+    // Gone for good, and asking twice is honestly a 404 rather than a silent success.
+    assert.equal((await call(user, 'DELETE', `/api/recurring/${custom.id}`)).status, 404);
+  });
+
   it('derives the anniversary from the start date and counts the years', async () => {
     const user = await signup('Dates');
     await call(user, 'POST', '/api/couples', { startedOn: '2020-06-01' });

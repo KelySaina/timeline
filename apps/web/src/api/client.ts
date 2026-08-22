@@ -56,6 +56,11 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     body: isForm ? (options.body as FormData) : options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
 
+  /*
+   * A 204 has no body to parse, so callers of an endpoint that returns one must not ask for a
+   * shape: `await api.del<{ thing: T }>(...)` compiles fine and then throws on `.thing`. Endpoints
+   * whose result the UI needs return it with a 200 for exactly this reason.
+   */
   if (response.status === 204) return undefined as T;
 
   const text = await response.text();
