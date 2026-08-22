@@ -29,12 +29,16 @@ export type NotificationState =
   | 'off'
   | 'on';
 
+/** Which kinds of notification this person wants. Per person, not per device. */
+export type NotificationPrefs = { reminders: boolean; activity: boolean; onThisDay: boolean };
+
 type ServerState = {
   configured: boolean;
   publicKey: string | null;
   subscribed: boolean;
   devices: number;
   sendHour: number;
+  prefs: NotificationPrefs;
 };
 
 const server = ref<ServerState | null>(null);
@@ -82,6 +86,25 @@ export const ready = computed(() => loaded.value);
 export const devices = computed(() => server.value?.devices ?? 0);
 /** The local hour reminders arrive at, so the card can say when rather than only whether. */
 export const sendHour = computed(() => server.value?.sendHour ?? 9);
+export const prefs = computed<NotificationPrefs>(
+  () => server.value?.prefs ?? { reminders: true, activity: false, onThisDay: false },
+);
+
+/**
+ * Change one kind. Optimistic, because a switch that waits for a round trip before moving reads as
+ * broken — and the server's answer replaces the guess either way.
+ */
+export async function setPref(key: keyof NotificationPrefs, value: boolean): Promise<void> {
+  const previous = server.value;
+  if (server.value) server.value = { ...server.value, prefs: { ...server.value.prefs, [key]: value } };
+  try {
+    const result = await api.patch<{ prefs: NotificationPrefs }>('/push/prefs', { [key]: value });
+    if (server.value) server.value = { ...server.value, prefs: result.prefs };
+  } catch (error) {
+    server.value = previous;
+    throw error;
+  }
+}
 
 /**
  * base64url from the API to the raw bytes the Push API insists on. Returned as the ArrayBuffer

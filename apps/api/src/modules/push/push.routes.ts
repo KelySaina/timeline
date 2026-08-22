@@ -58,6 +58,9 @@ pushRouter.get(
       subscribed: endpoint ? await push.hasSubscription(req.user!.id, endpoint) : false,
       // Every device this person has, so a phone can say "also on 1 other device".
       devices: await push.countSubscriptions(req.user!.id),
+      // Which kinds they want. Per person rather than per device: "tell me when Vero writes
+      // something" is a decision about the relationship, not about which screen is nearest.
+      prefs: await push.getPrefs(req.user!.id),
       /** Local hour reminders go out at, so the UI can say when rather than just whether. */
       sendHour: SEND_HOUR,
     });
@@ -91,6 +94,19 @@ pushRouter.delete('/push/subscribe', verifyCsrf, validate(endpointBody), async (
   const { endpoint } = valid<{ endpoint: string }>(req, 'body');
   await push.removeSubscription(req.user!.id, endpoint);
   res.json({ subscribed: false, devices: await push.countSubscriptions(req.user!.id) });
+});
+
+const prefsBody = z
+  .object({
+    reminders: z.boolean().optional(),
+    activity: z.boolean().optional(),
+    onThisDay: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, 'Nothing to change');
+
+pushRouter.patch('/push/prefs', verifyCsrf, validate(prefsBody), async (req, res) => {
+  const patch = valid<z.infer<typeof prefsBody>>(req, 'body');
+  res.json({ prefs: await push.setPrefs(req.user!.id, patch) });
 });
 
 /**

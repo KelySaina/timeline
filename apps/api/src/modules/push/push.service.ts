@@ -33,6 +33,12 @@ export type PushPayload = {
   tag: string;
 };
 
+/**
+ * Consecutive non-"gone" failures before a subscription is dropped. Generous on purpose: a device
+ * that is merely off for a fortnight must survive, and at one send per reminder this is many weeks.
+ */
+const MAX_CONSECUTIVE_FAILURES = 12;
+
 let configured = false;
 
 function ready(): boolean {
@@ -73,6 +79,74 @@ export async function saveSubscription(userId: string, input: SubscriptionInput)
 /** Forget one device. Scoped to the user so an endpoint cannot be used to unsubscribe someone else. */
 export async function removeSubscription(userId: string, endpoint: string): Promise<void> {
   await query('delete from push_subscriptions where user_id = $1 and endpoint = $2', [userId, endpoint]);
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * What someone wants to be told about
+ * ------------------------------------------------------------------------------------------ */
+
+export type NotificationPrefs = { reminders: boolean; activity: boolean; onThisDay: boolean };
+
+const PREF_COLUMNS = {
+  reminders: 'notify_reminders',
+  activity: 'notify_activity',
+  onThisDay: 'notify_on_this_day',
+} as const;
+
+export async function getPrefs(userId: string): Promise<NotificationPrefs> {
+  const row = await queryOne<{ notify_reminders: boolean; notify_activity: boolean; notify_on_this_day: boolean }>(
+    'select notify_reminders, notify_activity, notify_on_this_day from users where id = $1',
+    [userId],
+  );
+  return {
+    reminders: row?.notify_reminders ?? true,
+    activity: row?.notify_activity ?? false,
+    onThisDay: row?.notify_on_this_day ?? false,
+  };
+}
+
+export async function setPrefs(userId: string, patch: Partial<NotificationPrefs>): Promise<NotificationPrefs> {
+  // Column names come from PREF_COLUMNS, never from the request — the keys are validated by Zod
+  // before this is called, and nothing here interpolates a value.
+  const sets: string[] = [];
+  const params: unknown[] = [userId];
+  for (const [key, column] of Object.entries(PREF_COLUMNS)) {
+    const value = patch[key as keyof NotificationPrefs];
+    if (value === undefined) continue;
+    params.push(value);
+    sets.push(`${column} = $${params.length}`);
+  }
+  if (sets.length) {
+    await query(`update users set ${sets.join(', ')}, updated_at = now() where id = $1`, params);
+  }
+  return getPrefs(userId);
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * Claiming a send
+ * ------------------------------------------------------------------------------------------ */
+
+/**
+ * Claim one notification before sending it, and say whether this replica won.
+ *
+ * This is the whole concurrency story for every kind of send. Each replica receives every change
+ * and runs every tick, so the insert is what decides who delivers: the primary key lets exactly one
+ * of them through and the rest get nothing. It is also what makes a redeploy mid-tick safe.
+ *
+ * The key has to name the *occasion*, not the row — 'recurring:<id>:<date>' rather than
+ * 'recurring:<id>' — or the second occurrence is silently never sent.
+ */
+export async function claim(userId: string, key: string): Promise<boolean> {
+  const won = await query<{ user_id: string }>(
+    'insert into notification_sends (user_id, key) values ($1, $2) on conflict do nothing returning user_id',
+    [userId, key],
+  );
+  return won.length > 0;
+}
+
+/** Give a claim back, so a later attempt can retry something nothing accepted. */
+export async function releaseClaim(userId: string, key: string): Promise<void> {
+  await query('delete from notification_sends where user_id = $1 and key = $2', [userId, key]);
 }
 
 export async function countSubscriptions(userId: string): Promise<number> {
@@ -129,8 +203,22 @@ export async function sendToUser(userId: string, payload: PushPayload): Promise<
           await query('delete from push_subscriptions where id = $1', [row.id]);
           return;
         }
-        await query('update push_subscriptions set failures = failures + 1 where id = $1', [row.id]);
-        console.warn('[push] send failed', { subscription: row.id, status });
+        /*
+         * Anything that is not an outright "gone" is treated as transient — a push service having a
+         * bad minute, a network blip — but not forever. A subscription that has failed this many
+         * times in a row without ever succeeding is not coming back, and keeping it means every
+         * future send pays for a request that cannot land.
+         */
+        const after = await queryOne<{ failures: number }>(
+          'update push_subscriptions set failures = failures + 1 where id = $1 returning failures',
+          [row.id],
+        );
+        if ((after?.failures ?? 0) >= MAX_CONSECUTIVE_FAILURES) {
+          await query('delete from push_subscriptions where id = $1', [row.id]);
+          console.warn('[push] dropped a subscription after repeated failures', { subscription: row.id });
+          return;
+        }
+        console.warn('[push] send failed', { subscription: row.id, status, failures: after?.failures });
       }
     }),
   );

@@ -79,6 +79,19 @@ export function subscribe(coupleId: string, listener: (change: Change) => void):
 }
 
 /**
+ * Subscribe to every couple's changes on this replica. Used by the push sender, which is not tied
+ * to one open connection the way a stream is.
+ *
+ * Every replica receives every NOTIFY, so a listener registered here runs once per replica — which
+ * for a *send* means the caller has to claim the work before doing it, exactly as the reminder tick
+ * does. Filtering by couple, as subscribe() does, would not help: it is the same change everywhere.
+ */
+export function subscribeAll(listener: (change: Change) => void): () => void {
+  local.on('change', listener);
+  return () => local.off('change', listener);
+}
+
+/**
  * A LISTEN connection cannot come from the pool — it is held open for the life of the process and
  * would never be released back. It also has to survive the database restarting under it, so a
  * dropped connection reconnects with a backoff instead of taking the API down with it.

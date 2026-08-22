@@ -237,7 +237,11 @@ of root credentials.
 | No index on `unaccent(...)` | It is STABLE, not IMMUTABLE, and an index needs a wrapper that lies about that — which silently disagrees with the data after a dictionary change | A couple's timeline is thousands of rows at the outside |
 | Recurrences computed on read from `(month, day)` | No cron, no drift, correct across DST and leap years | The reminder scheduler reuses exactly this computation |
 | Reminders gated on the recipient's local hour, from an IANA zone on `users` | "Seven days before" is a claim about a calendar, not an instant, and partners travel apart | A per-person send hour is one column away |
-| The scheduler runs in every replica, with no lock | The claim is a row: `insert into reminder_sends` before the send, so the primary key is the concurrency control | The same pattern covers any future scheduled send |
+| Every sender runs in every replica, with no lock | The claim is a row: `insert into notification_sends` before the send, so the primary key is the concurrency control | Covers the scheduler and the bus-driven sender alike |
+| Activity push rides the change bus, not the scheduler | It is not about a date: it should land within seconds of the write, like the on-screen update | A digest would go back on the tick |
+| Activity push reads the row, unlike the SSE stream | The stream withholds content so the couple check stays on the read path; this runs inside the server with no client to authorize, and "a memory was added" without saying which is not worth an interruption | — |
+| Only `event.created` and `member.joined` notify | An edit or a delete is housekeeping the other screen already applied silently | New kinds are one branch in `describe()` |
+| Notification preferences on `users`, not on the subscription | "Tell me when they write something" is about the relationship, not about which screen is nearest — and a second device should inherit it | A per-device override would need a column on the subscription |
 | The claim key names the occurrence, not the row | An id-only key would fire once and never again | — |
 | A failed delivery releases its claim | Holding it would lose the reminder silently; releasing lets a later tick in the same hour retry | Nothing retries across hours, on purpose |
 | VAPID keys optional, all three or none | A deployment whose `.env` predates push must boot and hide the feature, not refuse to start; half-configured is a typo worth failing on | — |

@@ -12,13 +12,16 @@ import {
   devices,
   disable,
   enable,
+  prefs,
   ready,
   refresh,
   sendHour,
   sendTest,
+  setPref,
   state,
   working,
 } from '@/lib/notifications';
+import type { NotificationPrefs } from '@/lib/notifications';
 import { canOfferInstall } from '@/lib/pwa';
 import { useToastStore } from '@/stores/toast';
 import AppButton from './ui/AppButton.vue';
@@ -50,6 +53,25 @@ async function turnOn(): Promise<void> {
 async function turnOff(): Promise<void> {
   await disable();
   toasts.push('Reminders off for this device');
+}
+
+/**
+ * The three kinds, in the order they earn their keep. Reminders are why anyone turns this on, so it
+ * is first and defaults to on; the other two are additions, and each says plainly how often it
+ * would interrupt — that is the fact people actually decide on.
+ */
+const KINDS: { key: keyof NotificationPrefs; label: string; blurb: string; icon: string }[] = [
+  { key: 'reminders', label: 'Dates coming up', blurb: 'Anniversaries and birthdays, as far ahead as each one says.', icon: 'calendar-day' },
+  { key: 'activity', label: 'When they add something', blurb: 'Within seconds of it being written. The frequent one.', icon: 'heart' },
+  { key: 'onThisDay', label: 'On this day', blurb: 'Only on days that already hold a memory.', icon: 'clock' },
+];
+
+async function toggle(key: keyof NotificationPrefs, value: boolean): Promise<void> {
+  try {
+    await setPref(key, value);
+  } catch {
+    toasts.error('Could not save that');
+  }
 }
 
 async function test(): Promise<void> {
@@ -89,14 +111,14 @@ async function test(): Promise<void> {
         <!-- One sentence per state, naming the actual obstacle. -->
         <p class="mt-0.5 text-[0.8125rem] text-muted">
           <template v-if="state === 'on'">
-            A notification lands at {{ hourLabel }}, however many days ahead each date says.
+            Whatever is ticked below. Dates arrive at {{ hourLabel }} where you are.
             <template v-if="elsewhere > 0">
               Also on {{ elsewhere }} other device{{ elsewhere === 1 ? '' : 's' }}.
             </template>
           </template>
           <template v-else-if="state === 'off'">
-            A notification at {{ hourLabel }}, as far ahead as each date below says. Nothing else —
-            no digests, no activity.
+            Choose what is worth interrupting you for, then turn it on. Dates arrive at
+            {{ hourLabel }} where you are.
           </template>
           <template v-else-if="state === 'needs-install'">
             On iPhone and iPad, notifications only work once the app is on your home screen.
@@ -118,6 +140,29 @@ async function test(): Promise<void> {
             the Push API.
           </template>
         </p>
+
+        <!--
+          Shown while it is still off as well, because these are settings on the person and not on
+          the browser: they decide what a device gets when it is turned on, here or somewhere else.
+          Choosing first also means the reader knows what they are being asked to permit.
+        -->
+        <ul v-if="state === 'on' || state === 'off'" class="mt-3.5 space-y-2.5 border-t border-line pt-3.5">
+          <li v-for="kind in KINDS" :key="kind.key" class="flex items-start gap-2.5">
+            <FaIcon :icon="kind.icon" class="mt-1 shrink-0 text-[0.65rem] text-muted" />
+            <label class="min-w-0 flex-1 cursor-pointer" :for="`notify-${kind.key}`">
+              <span class="block text-[0.875rem] text-ink">{{ kind.label }}</span>
+              <span class="block text-[0.75rem] text-muted">{{ kind.blurb }}</span>
+            </label>
+            <input
+              :id="`notify-${kind.key}`"
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 shrink-0 accent-[var(--ember)]"
+              :checked="prefs[kind.key]"
+              :disabled="working"
+              @change="toggle(kind.key, ($event.target as HTMLInputElement).checked)"
+            />
+          </li>
+        </ul>
 
         <div v-if="state === 'on' || state === 'off'" class="mt-3 flex flex-wrap items-center gap-2">
           <AppButton v-if="state === 'off'" variant="primary" :loading="working" @click="turnOn">

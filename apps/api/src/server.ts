@@ -5,6 +5,7 @@ import { pool } from './db/pool.js';
 import { initStorage } from './modules/photos/storage/index.js';
 import { closeStreams, startRealtime, stopRealtime } from './modules/realtime/bus.js';
 import { startReminders, stopReminders } from './modules/push/reminders.js';
+import { startActivityPush, stopActivityPush } from './modules/push/activity.js';
 
 const app = createApp();
 
@@ -25,8 +26,9 @@ await waitForDatabase();
 await migrate();
 await initStorage();
 await startRealtime();
-// A no-op unless this deploy has a VAPID pair, so an install without push boots exactly as before.
+// Both no-ops unless this deploy has a VAPID pair, so an install without push boots as before.
 startReminders();
+startActivityPush();
 
 const server = app.listen(env.PORT, () => {
   console.log(`[boot] timeline api listening on :${env.PORT} (${env.NODE_ENV})`);
@@ -38,6 +40,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     // streams are ended first, otherwise shutdown blocks until the orchestrator loses patience.
     closeStreams();
     stopReminders();
+    stopActivityPush();
     server.close(() => {
       void stopRealtime()
         .then(() => pool.end())

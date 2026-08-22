@@ -4,7 +4,7 @@
  * Three things decide this design.
  *
  * **It runs in every replica, and that is fine.** There is no leader election and no advisory
- * lock, because the claim is a row: every send is `insert into reminder_sends ... on conflict do
+ * lock, because the claim is a row: every send is `insert into notification_sends ... on conflict do
  * nothing` before it is attempted, so two replicas ticking in the same second produce one send and
  * one no-op. The primary key is the concurrency control. A redeploy mid-tick is the same story.
  *
@@ -21,7 +21,7 @@
 import { daysUntil, nextOccurrence } from '../../lib/dates.js';
 import { query } from '../../db/pool.js';
 import { pushConfigured } from '../../config/env.js';
-import { sendToUser, type PushPayload } from './push.service.js';
+import { claim, releaseClaim, sendToUser, type PushPayload } from './push.service.js';
 
 /** How a reminder reaches a person. A parameter so the tests can assert on selection without a
  *  push service, and so the send path stays swappable if delivery ever moves off web push. */
@@ -70,7 +70,8 @@ const when = (days: number): string =>
  * The local date and hour are computed by Postgres from the stored IANA name rather than in JS,
  * so one clock decides — and DST is the database's problem, which it is good at.
  */
-async function candidates(): Promise<Candidate[]> {
+async function candidates(pref: 'notify_reminders' | 'notify_on_this_day'): Promise<Candidate[]> {
+  // `pref` is one of two literals from this module, never anything a request supplied.
   return query<Candidate>(
     `select u.id as user_id,
             cm.couple_id,
@@ -78,6 +79,7 @@ async function candidates(): Promise<Candidate[]> {
        from users u
        join couple_members cm on cm.user_id = u.id and cm.left_at is null
       where extract(hour from now() at time zone u.timezone) = $1
+        and u.${pref}
         and exists (select 1 from push_subscriptions s where s.user_id = u.id)`,
     [SEND_HOUR],
   );
@@ -99,7 +101,7 @@ function message(row: Due, occurrence: string, days: number): { title: string; b
  * Returns how many reminders were claimed, so a caller can assert on it.
  */
 export async function runReminderTick(deliver: Deliver = sendToUser): Promise<number> {
-  const people = await candidates();
+  const people = await candidates('notify_reminders');
   if (people.length === 0) return 0;
 
   let claimed = 0;
@@ -120,12 +122,8 @@ export async function runReminderTick(deliver: Deliver = sendToUser): Promise<nu
 
       // Claim before sending. The key names the occurrence, not the row, so the same anniversary
       // is claimable again next year — and an id-only key would silently never fire twice.
-      const won = await query<{ user_id: string }>(
-        `insert into reminder_sends (user_id, key) values ($1, $2)
-         on conflict do nothing returning user_id`,
-        [person.user_id, `recurring:${row.id}:${date}`],
-      );
-      if (won.length === 0) continue;
+      const key = `recurring:${row.id}:${date}`;
+      if (!(await claim(person.user_id, key))) continue;
       claimed += 1;
 
       const { title, body } = message(row, date, row.remind_days_before);
@@ -141,10 +139,7 @@ export async function runReminderTick(deliver: Deliver = sendToUser): Promise<nu
       // Nothing accepted it — release the claim so a later tick in this same hour can try again.
       // Once the hour passes the reminder is simply missed, which is the honest outcome.
       if (delivered === 0) {
-        await query('delete from reminder_sends where user_id = $1 and key = $2', [
-          person.user_id,
-          `recurring:${row.id}:${date}`,
-        ]);
+        await releaseClaim(person.user_id, key);
         claimed -= 1;
       }
     }
@@ -153,12 +148,76 @@ export async function runReminderTick(deliver: Deliver = sendToUser): Promise<nu
   return claimed;
 }
 
+/* ---------------------------------------------------------------------------------------------
+ * On this day
+ * ------------------------------------------------------------------------------------------ */
+
+type Anniversary = { id: string; title: string; event_date: string; years: number };
+
+/**
+ * "Three years ago today." Runs on the same tick and the same local hour as reminders, because it
+ * answers the same question — what does today mean — from the other direction: reminders look
+ * forward at dates that recur, this looks back at ones that happened.
+ *
+ * Matched on month and day rather than by computing dates in JS, so 29 February simply has no match
+ * in a common year. That is the honest answer: the memory happened on a date that does not exist
+ * this year, and inventing the 28th for it would be inventing precision the schema refuses to.
+ */
+export async function runOnThisDayTick(deliver: Deliver = sendToUser): Promise<number> {
+  const people = await candidates('notify_on_this_day');
+  if (people.length === 0) return 0;
+
+  let sent = 0;
+
+  for (const person of people) {
+    const rows = await query<Anniversary>(
+      `select e.id, e.title, e.event_date::text as event_date,
+              (extract(year from $2::date) - extract(year from e.event_date))::int as years
+         from events e
+        where e.couple_id = $1
+          and e.deleted_at is null
+          and extract(month from e.event_date) = extract(month from $2::date)
+          and extract(day from e.event_date) = extract(day from $2::date)
+          and e.event_date < $2::date
+          -- A memory recorded to the month or the year did not happen on a day, so it has no
+          -- anniversary to mark.
+          and e.date_precision = 'day'
+        order by e.event_date`,
+      [person.couple_id, person.local_date],
+    );
+    if (rows.length === 0) continue;
+
+    // One notification a day at most, whatever it holds. Two would be two interruptions for the
+    // same thought.
+    const key = `onthisday:${person.local_date}`;
+    if (!(await claim(person.user_id, key))) continue;
+
+    const oldest = rows[0]!;
+    const years = oldest.years === 1 ? 'A year ago today' : `${oldest.years} years ago today`;
+    const title = rows.length === 1 ? years : `${years}, and ${rows.length - 1} more`;
+
+    const delivered = await deliver(person.user_id, {
+      title,
+      body: rows.map((row) => row.title).slice(0, 3).join(' · '),
+      // The whole day, not one memory: there may be several, and they are the point together.
+      url: rows.length === 1 ? `/memory/${oldest.id}` : '/',
+      tag: key,
+    });
+
+    if (delivered === 0) await releaseClaim(person.user_id, key);
+    else sent += 1;
+  }
+
+  return sent;
+}
+
 let timer: NodeJS.Timeout | null = null;
 
 export function startReminders(): void {
   if (!pushConfigured || timer) return;
   timer = setInterval(() => {
     void runReminderTick().catch((error) => console.error('[reminders] tick failed', error));
+    void runOnThisDayTick().catch((error) => console.error('[on-this-day] tick failed', error));
   }, TICK_MS);
   // Never hold the process open: a tick pending at shutdown is a tick worth losing.
   timer.unref();

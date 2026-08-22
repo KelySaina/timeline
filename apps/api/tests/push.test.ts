@@ -27,7 +27,8 @@ process.env.VAPID_SUBJECT = 'mailto:test@timeline.local';
 const { createApp } = await import('../src/app.js');
 const { pool, query, queryOne } = await import('../src/db/pool.js');
 const { migrate } = await import('../src/db/migrate.js');
-const { runReminderTick, SEND_HOUR } = await import('../src/modules/push/reminders.js');
+const { runReminderTick, runOnThisDayTick, SEND_HOUR } = await import('../src/modules/push/reminders.js');
+const { handleChangeForTests } = await import('../src/modules/push/activity.js');
 
 let server: Server;
 let base = '';
@@ -337,6 +338,23 @@ describe('reminder scheduler', () => {
     assert.equal(retry.sent.length, 1);
   });
 
+  it('stays quiet for someone who turned reminders off', async () => {
+    const zone = await zoneAtSendHour();
+    const { session, id } = await signup('OptedOut');
+    await call(session, 'POST', '/api/couples', { startedOn: `2020-${plusDays(zone.localDate, 7).slice(5)}` });
+    await call(session, 'POST', '/api/push/subscribe', { ...subscription(), timezone: zone.name });
+
+    // Having a subscription used to mean wanting reminders. It no longer does — the frequent kinds
+    // arrived and an implicit yes would have covered them too.
+    const off = await call(session, 'PATCH', '/api/push/prefs', { reminders: false });
+    assert.equal(off.status, 200);
+    assert.equal(off.body.prefs.reminders, false);
+
+    const run = recorder();
+    await runReminderTick(run.deliver);
+    assert.equal(run.sent.filter((s) => s.userId === id).length, 0);
+  });
+
   it('never reminds a person with no subscription', async () => {
     const zone = await zoneAtSendHour();
     const { session, id } = await signup('Unsubscribed');
@@ -346,5 +364,191 @@ describe('reminder scheduler', () => {
     const run = recorder();
     await runReminderTick(run.deliver);
     assert.equal(run.sent.filter((s) => s.userId === id).length, 0);
+  });
+});
+
+describe('on this day', () => {
+  const recorder = () => {
+    const sent: { userId: string; title: string; tag: string }[] = [];
+    const deliver = async (userId: string, payload: { title: string; body: string; tag: string }) => {
+      sent.push({ userId, title: payload.title, tag: payload.tag });
+      return 1;
+    };
+    return { sent, deliver };
+  };
+
+  it('looks back at the same date in past years, once a day', async () => {
+    const zone = await zoneAtSendHour();
+    const { session, id } = await signup('Nostalgic');
+    await call(session, 'POST', '/api/couples', {});
+    await call(session, 'POST', '/api/push/subscribe', { ...subscription(), timezone: zone.name });
+    assert.equal((await call(session, 'PATCH', '/api/push/prefs', { onThisDay: true })).status, 200);
+
+    // Today's month and day, three years back — and one a year later, so the count matters.
+    const [year, month, day] = zone.localDate.split('-').map(Number);
+    await call(session, 'POST', '/api/events', {
+      type: 'memory', title: 'The long walk', eventDate: `${year - 3}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    });
+    await call(session, 'POST', '/api/events', {
+      type: 'memory', title: 'The short walk', eventDate: `${year - 1}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    });
+    // A different date entirely, which must not be swept in.
+    await call(session, 'POST', '/api/events', {
+      type: 'memory', title: 'Some other day', eventDate: `${year - 2}-01-02`,
+    });
+
+    const first = recorder();
+    await runOnThisDayTick(first.deliver);
+    const mine = first.sent.filter((s) => s.userId === id);
+    assert.equal(mine.length, 1, 'one notification for the day, however many memories it holds');
+    // Led by the oldest, because that is the number worth hearing.
+    assert.equal(mine[0]!.title, '3 years ago today, and 1 more');
+    assert.equal(mine[0]!.tag, `onthisday:${zone.localDate}`);
+
+    // Claimed for the day, so the other three ticks in the hour say nothing.
+    const second = recorder();
+    await runOnThisDayTick(second.deliver);
+    assert.equal(second.sent.filter((s) => s.userId === id).length, 0);
+  });
+
+  it('says nothing on a day that holds no memory, and skips fuzzy dates', async () => {
+    const zone = await zoneAtSendHour();
+    const { session, id } = await signup('Quiet');
+    await call(session, 'POST', '/api/couples', {});
+    await call(session, 'POST', '/api/push/subscribe', { ...subscription(), timezone: zone.name });
+    await call(session, 'PATCH', '/api/push/prefs', { onThisDay: true });
+
+    const [year, month, day] = zone.localDate.split('-').map(Number);
+    // "Sometime that year" did not happen on a day, so it has no anniversary to mark. Marking one
+    // would be inventing precision the schema deliberately refuses to.
+    await call(session, 'POST', '/api/events', {
+      type: 'memory',
+      title: 'Sometime that summer',
+      eventDate: `${year - 4}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      datePrecision: 'year',
+    });
+
+    const run = recorder();
+    await runOnThisDayTick(run.deliver);
+    assert.equal(run.sent.filter((s) => s.userId === id).length, 0);
+  });
+});
+
+describe('activity notifications', () => {
+  /*
+   * Memories are inserted straight into the table rather than posted through the API, and the
+   * Change is built by hand — which is what these tests want anyway, since they exercise the
+   * handler and not the bus.
+   *
+   * It is also what makes them deterministic. Posting publishes a change, and anything else
+   * listening on this database — a dev API container on a developer's machine, another replica —
+   * has its own activity handler that will claim the notification first. That is the design working
+   * (the claim row is what stops two replicas both sending) but it makes a test that asserts "this
+   * process sent it" a race against whatever else is running.
+   */
+  const insertEvent = async (coupleId: string, userId: string, title: string): Promise<string> => {
+    const row = await queryOne<{ id: string }>(
+      `insert into events (couple_id, created_by, type, title, event_date)
+            values ($1, $2, 'memory', $3, '2024-05-05') returning id`,
+      [coupleId, userId, title],
+    );
+    return row!.id;
+  };
+
+  /*
+   * Asserting on deliveries rather than on the claim table. A claim is released again when nothing
+   * accepts the notification, and these endpoints accept nothing — so the table looks identical
+   * whether a send was skipped on purpose or merely failed.
+   */
+  const recorder = () => {
+    const sent: { userId: string; title: string; body: string; url: string }[] = [];
+    const deliver = async (
+      userId: string,
+      payload: { title: string; body: string; url: string; tag: string },
+    ) => {
+      sent.push({ userId, title: payload.title, body: payload.body, url: payload.url });
+      return 1;
+    };
+    return { sent, deliver };
+  };
+
+  it('tells the other partner, never the one who wrote it, and only when asked', async () => {
+    const alex = await signup('Alex');
+    await call(alex.session, 'POST', '/api/couples', {});
+    const invite = await call(alex.session, 'POST', '/api/couples/me/invitations', {});
+    const mira = await signup('Mira');
+    await call(mira.session, 'POST', `/api/invitations/${invite.body.invitation.code}/accept`, {});
+
+    await call(alex.session, 'POST', '/api/push/subscribe', subscription());
+    await call(mira.session, 'POST', '/api/push/subscribe', subscription());
+
+    const couple = (await call(alex.session, 'GET', '/api/couples/me')).body.couple.id;
+    const eventId = await insertEvent(couple, alex.id, 'Nosy Be');
+    const change = { couple, kind: 'event.created' as const, id: eventId, actor: alex.id };
+
+    // Nobody has opted in, so nobody hears about it. This is the frequent kind, and the frequent
+    // kind is what makes someone revoke permission for the other two.
+    const silent = recorder();
+    await handleChangeForTests(change, silent.deliver);
+    assert.equal(silent.sent.length, 0, 'off by default');
+
+    assert.equal((await call(mira.session, 'PATCH', '/api/push/prefs', { activity: true })).status, 200);
+    const told = recorder();
+    await handleChangeForTests(change, told.deliver);
+    assert.equal(told.sent.length, 1);
+    assert.equal(told.sent[0]!.userId, mira.id, 'the partner, not the author');
+    assert.equal(told.sent[0]!.title, 'Alex added a memory');
+    assert.equal(told.sent[0]!.body, 'Nosy Be', 'naming it is the whole point of interrupting someone');
+    assert.equal(told.sent[0]!.url, `/memory/${eventId}`, 'straight to the memory, not the timeline');
+
+    // The same memory must not interrupt anyone twice, however many times the change is seen —
+    // which is what makes it safe for every replica to hear every change. Opting Alex in as well
+    // changes nothing here: this memory has already been announced.
+    assert.equal((await call(alex.session, 'PATCH', '/api/push/prefs', { activity: true })).status, 200);
+    const again = recorder();
+    await handleChangeForTests(change, again.deliver);
+    assert.deepEqual(again.sent, [], 'already announced, and never to the author');
+
+    // A different memory from Alex still reaches Mira, so the silence above is about that one
+    // memory having been announced and not about Alex being the author of everything.
+    const secondId = await insertEvent(couple, alex.id, 'The long way home');
+    const next = recorder();
+    await handleChangeForTests(
+      { couple, kind: 'event.created', id: secondId, actor: alex.id },
+      next.deliver,
+    );
+    assert.deepEqual(next.sent.map((s) => s.userId), [mira.id]);
+    assert.equal(next.sent[0]!.body, 'The long way home');
+  });
+
+  it('ignores the changes that are housekeeping rather than news', async () => {
+    const alex = await signup('Editor');
+    await call(alex.session, 'POST', '/api/couples', {});
+    const invite = await call(alex.session, 'POST', '/api/couples/me/invitations', {});
+    const mira = await signup('Reader');
+    await call(mira.session, 'POST', `/api/invitations/${invite.body.invitation.code}/accept`, {});
+    await call(mira.session, 'POST', '/api/push/subscribe', subscription());
+    await call(mira.session, 'PATCH', '/api/push/prefs', { activity: true });
+
+    const couple = (await call(alex.session, 'GET', '/api/couples/me')).body.couple.id;
+    const eventId = await insertEvent(couple, alex.id, 'Edited later');
+
+    // An edit, a delete and a theme change are all things the other screen has already applied in
+    // silence. Interrupting someone for them is how notifications get switched off.
+    const run = recorder();
+    for (const kind of ['event.updated', 'event.deleted', 'couple.updated', 'recurring.changed'] as const) {
+      await handleChangeForTests({ couple, kind, id: eventId, actor: alex.id }, run.deliver);
+    }
+    assert.deepEqual(run.sent, []);
+
+    // A new memory on the same couple still gets through, so the silence above is about the kind of
+    // change and not about anything else in this setup.
+    const freshId = await insertEvent(couple, alex.id, 'Worth saying');
+    const news = recorder();
+    await handleChangeForTests(
+      { couple, kind: 'event.created', id: freshId, actor: alex.id },
+      news.deliver,
+    );
+    assert.deepEqual(news.sent.map((s) => s.title), ['Editor added a memory']);
   });
 });

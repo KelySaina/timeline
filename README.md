@@ -309,11 +309,17 @@ sent nothing. It sends now.
   reports the zone when notifications are switched on; nobody is asked to pick one from a list.
 - **Nobody is reminded of their own birthday.** Their partner is.
 - **Every replica can run the scheduler.** There is no leader election and no lock: each send is
-  claimed by an `insert into reminder_sends` before it is attempted, so a second replica — or a
+  claimed by an `insert into notification_sends` before it is attempted, so a second replica — or a
   redeploy mid-tick — loses on the primary key and sends nothing. The key names the *occurrence*, so
   the same anniversary is claimable again next year.
+- **Three kinds, three answers.** Dates coming up (on by default — it is why anyone turns this on),
+  *when they add something* (within seconds of the write, off by default: it is the frequent one, and
+  the frequent one is what gets permission revoked for the other two), and *on this day* (only on a
+  date that already holds a memory). Kept on the person, not the device, so a second phone inherits
+  the choice.
 - **Per browser, not per account.** The switch reflects the device you are looking at, and each one
-  is turned on separately. A dead endpoint (404/410 from the push service) is deleted on the spot.
+  is turned on separately. A dead endpoint (404/410 from the push service) is deleted on the spot,
+  and one that keeps failing for any other reason is dropped after twelve consecutive attempts.
 - **The card names the actual obstacle.** Not supported, no worker, needs installing first (iOS),
   server has no keys, permission denied, off, on — six different sentences, and a button only where
   a tap can do something.
