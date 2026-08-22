@@ -134,9 +134,12 @@ export async function getSummary(coupleId: string) {
       [coupleId],
     ),
     query<{ type: EventType; count: string }>(
+      // Past-only, exactly like the year counts above. These two drive the chips that sit side by
+      // side over the story scroll, so counting future memories here made a "Trips 3" chip filter
+      // down to two rows — and made the type chips disagree with the year chips in the same row.
       `select type, count(*) as count
          from events
-        where couple_id = $1 and deleted_at is null
+        where couple_id = $1 and deleted_at is null and event_date <= current_date
         group by 1`,
       [coupleId],
     ),

@@ -211,6 +211,31 @@ describe('timeline ordering and scope', () => {
     assert.equal(summary.body.upcomingCount, 1);
     assert.deepEqual(summary.body.years.map((y: any) => y.year), [2025, 2021, 2020]);
 
+    /**
+     * The summary drives the filter chips over the story scroll, so every count in it has to
+     * describe the same set that scroll shows — past only. Paris is a 2099 trip: it belongs to
+     * upcomingCount and to nothing else. Counting it under types made a chip promise a row that
+     * filtering could never return, and made the type chips disagree with the year chips beside
+     * them (years summed to the past, types to everything).
+     */
+    assert.equal(summary.body.types.trip ?? 0, 0, 'a future trip must not appear as a story chip');
+    assert.equal(summary.body.types.memory, 2);
+    assert.equal(summary.body.types.milestone, 1);
+
+    const chipTotal = Object.values(summary.body.types as Record<string, number>)
+      .reduce((sum, n) => sum + n, 0);
+    const storyTotal = (await call(user, 'GET', '/api/events?scope=past')).body.total;
+    assert.equal(chipTotal, storyTotal, 'the chips must account for exactly the story scroll');
+
+    const yearTotal = (summary.body.years as { count: number }[]).reduce((sum, y) => sum + y.count, 0);
+    assert.equal(yearTotal, storyTotal, 'year chips and type chips must describe the same set');
+
+    // And each chip's own number must match what clicking it returns.
+    for (const [type, count] of Object.entries(summary.body.types as Record<string, number>)) {
+      const clicked = await call(user, 'GET', `/api/events?scope=past&type=${type}`);
+      assert.equal(clicked.body.total, count, `the ${type} chip promises ${count}`);
+    }
+
     const filtered = await call(user, 'GET', '/api/events?scope=all&type=trip');
     assert.equal(filtered.body.total, 1);
 

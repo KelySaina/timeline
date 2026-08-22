@@ -62,7 +62,9 @@ const stats = computed(() => [
           {{ togetherParts ? 'Together for' : couple.title || names }}
         </p>
 
-        <h1 v-if="togetherParts" class="display mt-1 flex flex-wrap items-baseline gap-x-2.5 text-[1.7rem] leading-none sm:text-[2.15rem]">
+        <!-- gap-y matters: with leading-none, a duration that wraps (a long one, a narrow screen)
+             would otherwise put two lines of 27px type flush against each other. -->
+        <h1 v-if="togetherParts" class="display mt-1 flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-[1.7rem] leading-none sm:text-[2.15rem]">
           <span v-for="part in togetherParts" :key="part.unit" class="whitespace-nowrap">
             <span class="tabular-nums">{{ part.value }}</span>
             <span class="ml-1 text-[0.62em] font-normal text-muted">{{ part.unit }}</span>
@@ -80,9 +82,16 @@ const stats = computed(() => [
       <slot name="action" />
     </div>
 
-    <dl class="mt-4 grid grid-cols-4 gap-2">
-      <div v-for="stat in stats" :key="stat.label" class="card-quiet px-2 py-2.5 text-center">
-        <dt class="text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-muted">{{ stat.label }}</dt>
+    <!--
+      Four tiles in one row is the point — the header must not push the timeline down — but
+      "Milestones" is 74px of tracked uppercase and the tile's content box is only 66px on a 390px
+      phone, so the label used to bleed straight over the card's edges (and collide with "Photos"
+      at 320px). Tighter caps and narrower padding buy back enough to fit from 360px up; below
+      that no legible one-row layout exists, so it becomes 2x2 rather than pretending.
+    -->
+    <dl class="mt-4 grid grid-cols-2 gap-2 min-[360px]:grid-cols-4">
+      <div v-for="stat in stats" :key="stat.label" class="card-quiet px-1 py-2.5 text-center sm:px-2">
+        <dt class="text-[0.5625rem] font-semibold uppercase tracking-[0.04em] text-muted sm:text-[0.625rem] sm:tracking-[0.1em]">{{ stat.label }}</dt>
         <dd class="display mt-0.5 text-[1.25rem] tabular-nums">{{ stat.value }}</dd>
       </div>
     </dl>
