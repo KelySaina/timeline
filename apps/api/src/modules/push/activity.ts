@@ -108,8 +108,6 @@ async function handle(change: Change, deliver: Deliver = sendToUser): Promise<vo
     const key = `activity:${payload.tag}`;
     // Already claimed means already sent. The same memory must not interrupt someone twice — and
     // because a failed delivery gives its claim back, a genuine retry is still possible.
-    // Already claimed means already sent. The same memory must not interrupt someone twice — and
-    // because a failed delivery gives its claim back, a genuine retry is still possible.
     if (!(await claim(person.user_id, key))) continue;
 
     const delivered = await deliver(person.user_id, payload);
