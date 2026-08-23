@@ -15,6 +15,7 @@ import { fromBuffer, type Entry, type ZipFile } from 'yauzl';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/db/pool.js';
 import { migrate } from '../src/db/migrate.js';
+import { ensureDatabase } from './support/database.js';
 import { initStorage } from '../src/modules/photos/storage/index.js';
 
 let server: Server;
@@ -93,6 +94,7 @@ function unzip(bytes: Buffer): Promise<Map<string, Buffer>> {
 }
 
 before(async () => {
+  await ensureDatabase();
   await migrate();
   await initStorage(3);
   server = createApp().listen(0);

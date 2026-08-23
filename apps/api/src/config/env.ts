@@ -4,6 +4,13 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4281),
   DATABASE_URL: z.string().min(1),
+  /**
+   * Where `npm test` points instead, when set. Tests share a database with whatever else is running
+   * against DATABASE_URL otherwise — including a dev API container, which listens on the same
+   * change channel and reacts to the changes a test publishes. That made the activity-notification
+   * tests flaky in a way that was invisible in CI, where the database is already dedicated.
+   */
+  TEST_DATABASE_URL: z.string().optional(),
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must be at least 32 characters'),
   UPLOAD_DIR: z.string().default('/data/uploads'),
   COOKIE_SECURE: z
@@ -47,6 +54,14 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+// Redirected here rather than at every call site, so nothing downstream has to remember which
+// database it is talking to. CI sets DATABASE_URL to a dedicated one already and leaves this unset,
+// so its behaviour is unchanged.
+if (env.NODE_ENV === 'test' && env.TEST_DATABASE_URL) {
+  env.DATABASE_URL = env.TEST_DATABASE_URL;
+}
+
 export const isProd = env.NODE_ENV === 'production';
 
 /**

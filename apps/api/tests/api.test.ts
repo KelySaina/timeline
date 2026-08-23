@@ -12,6 +12,7 @@ import sharp from 'sharp';
 import { createApp } from '../src/app.js';
 import { pool } from '../src/db/pool.js';
 import { migrate } from '../src/db/migrate.js';
+import { ensureDatabase } from './support/database.js';
 import { initStorage, storageName } from '../src/modules/photos/storage/index.js';
 import { startRealtime, stopRealtime } from '../src/modules/realtime/bus.js';
 import { STORY_LAYOUTS } from '../src/modules/couples/storyLayouts.js';
@@ -85,6 +86,7 @@ const photoForm = async (count = 1): Promise<FormData> => {
 
 before(async () => {
   try {
+    await ensureDatabase();
     await migrate();
     // Same boot order as the server: schema, then the photo store (bucket or directory), then the
     // LISTEN connection the change stream fans out over.

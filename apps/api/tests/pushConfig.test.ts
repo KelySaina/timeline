@@ -31,6 +31,7 @@ process.env.VAPID_SUBJECT = 'mailto:me@example.com';
 const { createApp } = await import('../src/app.js');
 const { pool } = await import('../src/db/pool.js');
 const { migrate } = await import('../src/db/migrate.js');
+const { ensureDatabase } = await import('./support/database.js');
 const { pushConfigured, usableSubject } = await import('../src/config/env.js');
 
 let server: Server;
@@ -59,6 +60,7 @@ async function call(method: string, path: string, body?: unknown) {
 }
 
 before(async () => {
+  await ensureDatabase();
   await migrate();
   server = createApp().listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
