@@ -21,7 +21,7 @@ const stepParams = z.object({ id: z.string().uuid(), stepId: z.string().uuid() }
 const bodySchema = z.object({
   title: z.string().trim().min(1, 'Give it a name').max(140),
   notes: z.string().trim().max(2000).nullish(),
-  status: z.enum(['idea', 'doing', 'done']).optional(),
+  status: z.enum(['idea', 'doing', 'done', 'cancelled']).optional(),
   /**
    * A year, or null for "someday". Bounded rather than open: a target of 20260 is a typo, and a
    * target in the past is a hope that has already gone by, which the list is allowed to show.
@@ -99,10 +99,20 @@ projectsRouter.patch(
 );
 
 /**
- * Finishing, which can put it on the timeline in the same commit.
+ * Pushing it back a year. Its own endpoint rather than a PATCH from the client, so the new year is
+ * computed from what is stored — two people tapping it in the same minute add one year, not two.
+ */
+projectsRouter.post('/projects/:id/postpone', verifyCsrf, validate(idParam, 'params'), async (req, res) => {
+  const project = await service.postponeProject(req.couple!.id, valid<{ id: string }>(req, 'params').id);
+  await notify(req, 'project.changed', project.id);
+  res.json({ project });
+});
+
+/**
+ * Finishing, which puts it on the timeline in the same commit.
  *
- * The date is optional and defaults to today: most projects are marked done when they are done. A
- * date is accepted because the "we finally did it" moment is often remembered a week later.
+ * The date is optional and defaults to today: most things are marked done when they are done. One
+ * is accepted because "we finally did it" is often remembered a week later.
  */
 projectsRouter.post(
   '/projects/:id/complete',
@@ -110,7 +120,6 @@ projectsRouter.post(
   validate(idParam, 'params'),
   validate(
     z.object({
-      becomeMemory: z.boolean().optional(),
       eventDate: z
         .string()
         .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
@@ -119,12 +128,12 @@ projectsRouter.post(
   ),
   async (req, res) => {
     const { id } = valid<{ id: string }>(req, 'params');
-    const body = valid<{ becomeMemory?: boolean; eventDate?: string }>(req, 'body');
-    const { project, eventId } = await service.completeProject(req.couple!.id, req.user!.id, id, body);
+    const body = valid<{ eventDate?: string }>(req, 'body');
+    const project = await service.completeProject(req.couple!.id, req.user!.id, id, body);
 
     await notify(req, 'project.changed', project.id);
     // A new memory is a change to the story too, and the other screen has to place it.
-    if (eventId) await notify(req, 'event.created', eventId);
+    if (project.eventId) await notify(req, 'event.created', project.eventId);
 
     res.json({ project });
   },

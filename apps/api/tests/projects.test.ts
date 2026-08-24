@@ -171,10 +171,7 @@ describe('projects', () => {
     });
     const id = created.body.project.id;
 
-    const done = await call(user, 'POST', `/api/projects/${id}/complete`, {
-      becomeMemory: true,
-      eventDate: '2026-05-05',
-    });
+    const done = await call(user, 'POST', `/api/projects/${id}/complete`, { eventDate: '2026-05-05' });
     assert.equal(done.status, 200);
     assert.equal(done.body.project.status, 'done');
     // The date they gave, not the moment they tapped: saying "we did it in May" means it was
@@ -191,26 +188,83 @@ describe('projects', () => {
     assert.equal(event.body.event.eventDate, '2026-05-05');
     assert.equal((await call(user, 'GET', '/api/search?q=dive')).body.total, 1);
 
-    // Asked twice, it must not mint a second memory for the same project.
-    const again = await call(user, 'POST', `/api/projects/${id}/complete`, { becomeMemory: true });
-    assert.equal(again.status, 400);
+    // Finishing twice — a re-tap, or finished, reopened and finished again — must not put a second
+    // copy on the story.
+    const again = await call(user, 'POST', `/api/projects/${id}/complete`, {});
+    assert.equal(again.status, 200);
+    assert.equal(again.body.project.eventId, done.body.project.eventId);
+    assert.equal((await call(user, 'GET', '/api/events?scope=all')).body.total, 1);
   });
 
-  it('finishes without a memory when that is what was asked', async () => {
-    const user = await signup('Quiet');
+  it('always makes a memory, because that is what done means here', async () => {
+    const user = await signup('Milestone');
     await call(user, 'POST', '/api/couples', {});
     const created = await call(user, 'POST', '/api/projects', { title: 'Fix the tap', status: 'doing' });
 
+    // No flag, no choice: a project marked done happened, and a thing that happened is a memory.
     const done = await call(user, 'POST', `/api/projects/${created.body.project.id}/complete`, {});
     assert.equal(done.body.project.status, 'done');
-    assert.equal(done.body.project.eventId, null);
-    assert.equal((await call(user, 'GET', '/api/events?scope=all')).body.total, 0, 'nothing on the story');
+    assert.ok(done.body.project.eventId);
+    assert.equal((await call(user, 'GET', '/api/events?scope=all')).body.total, 1);
+  });
 
-    // Reopened, the completion is cleared — the record must not claim a finish date for something
-    // underway again — but a memory it made would stay, because that happened.
-    const reopened = await call(user, 'PATCH', `/api/projects/${created.body.project.id}`, { status: 'doing' });
-    assert.equal(reopened.body.project.status, 'doing');
-    assert.equal(reopened.body.project.completedAt, null);
+  it('lets a project be let go, and wanted again', async () => {
+    const user = await signup('Realist');
+    await call(user, 'POST', '/api/couples', {});
+    const created = await call(user, 'POST', '/api/projects', { title: 'Move to Paris', targetYear: 2027 });
+    const id = created.body.project.id;
+
+    // Letting go is not removing: deciding against something is part of the story.
+    const gone = await call(user, 'PATCH', `/api/projects/${id}`, { status: 'cancelled' });
+    assert.equal(gone.status, 200);
+    assert.equal(gone.body.project.status, 'cancelled');
+    assert.ok(gone.body.project.completedAt, 'closing stamps the moment, whichever way it closed');
+    assert.equal(gone.body.project.eventId, null, 'and never puts it on the timeline');
+    assert.equal((await call(user, 'GET', '/api/events?scope=all')).body.total, 0);
+
+    // It is still on the list, last.
+    const listed = await call(user, 'GET', '/api/projects');
+    assert.equal(listed.body.projects.length, 1);
+    assert.equal(listed.body.projects[0].status, 'cancelled');
+
+    // Wanting it again reopens it, and clears the closing date.
+    const back = await call(user, 'PATCH', `/api/projects/${id}`, { status: 'idea' });
+    assert.equal(back.body.project.status, 'idea');
+    assert.equal(back.body.project.completedAt, null);
+  });
+
+  it('pushes a project back a year, from what is stored', async () => {
+    const user = await signup('Postponer');
+    await call(user, 'POST', '/api/couples', {});
+    const next = new Date().getFullYear() + 1;
+    const created = await call(user, 'POST', '/api/projects', { title: 'Go to Japan', targetYear: next });
+    const id = created.body.project.id;
+
+    const moved = await call(user, 'POST', `/api/projects/${id}/postpone`, {});
+    assert.equal(moved.status, 200);
+    assert.equal(moved.body.project.targetYear, next + 1);
+
+    // Computed server-side from the stored year, so two taps are two years and not a lost update.
+    await call(user, 'POST', `/api/projects/${id}/postpone`, {});
+    assert.equal((await call(user, 'GET', '/api/projects')).body.projects[0].targetYear, next + 2);
+
+    // Pushing back something closed wants it again: you cannot postpone what you already finished.
+    await call(user, 'PATCH', `/api/projects/${id}`, { status: 'cancelled' });
+    const revived = await call(user, 'POST', `/api/projects/${id}/postpone`, {});
+    assert.equal(revived.body.project.status, 'idea');
+    assert.equal(revived.body.project.completedAt, null);
+
+    // A project with no year is already "someday" and has nothing to push.
+    const vague = await call(user, 'POST', '/api/projects', { title: 'Grow tomatoes' });
+    assert.equal(
+      (await call(user, 'POST', `/api/projects/${vague.body.project.id}/postpone`, {})).status,
+      400,
+    );
+
+    // A stale year is dragged to this one rather than staying in the past.
+    const old = await call(user, 'POST', '/api/projects', { title: 'Old hope', targetYear: 2001 });
+    const dragged = await call(user, 'POST', `/api/projects/${old.body.project.id}/postpone`, {});
+    assert.equal(dragged.body.project.targetYear, new Date().getFullYear());
   });
 
   it('is one couple\'s list and never another\'s', async () => {
@@ -230,6 +284,7 @@ describe('projects', () => {
     assert.equal((await call(outsider, 'PATCH', `/api/projects/${id}`, { title: 'Mine now' })).status, 404);
     assert.equal((await call(outsider, 'DELETE', `/api/projects/${id}`)).status, 404);
     assert.equal((await call(outsider, 'POST', `/api/projects/${id}/complete`, {})).status, 404);
+    assert.equal((await call(outsider, 'POST', `/api/projects/${id}/postpone`, {})).status, 404);
     assert.equal(
       (await call(outsider, 'PATCH', `/api/projects/${id}/steps/${stepId}`, { done: true })).status,
       404,
@@ -245,9 +300,7 @@ describe('projects', () => {
     const user = await signup('Remover');
     await call(user, 'POST', '/api/couples', {});
     const created = await call(user, 'POST', '/api/projects', { title: 'Plant a tree', status: 'doing' });
-    const done = await call(user, 'POST', `/api/projects/${created.body.project.id}/complete`, {
-      becomeMemory: true,
-    });
+    const done = await call(user, 'POST', `/api/projects/${created.body.project.id}/complete`, {});
     const eventId = done.body.project.eventId;
 
     const removed = await call(user, 'DELETE', `/api/projects/${created.body.project.id}`);

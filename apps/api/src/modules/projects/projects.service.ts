@@ -22,7 +22,7 @@ import { query, queryOne, transaction } from '../../db/pool.js';
 import { badRequest, notFound } from '../../lib/errors.js';
 import { todayIso } from '../../lib/dates.js';
 
-export type ProjectStatus = 'idea' | 'doing' | 'done';
+export type ProjectStatus = 'idea' | 'doing' | 'done' | 'cancelled';
 
 export type ProjectStep = { id: string; title: string; done: boolean };
 
@@ -34,6 +34,7 @@ export type Project = {
   /** A hope, never a deadline. Null is "someday", which is a real answer. */
   targetYear: number | null;
   author: { id: string; displayName: string };
+  /** When it closed, finished or let go. Null while it is still open. */
   completedAt: string | null;
   /** The memory this became, when it was finished into one. */
   eventId: string | null;
@@ -91,7 +92,12 @@ export async function listProjects(coupleId: string): Promise<Project[]> {
       order by
         -- Underway first, then wants, then what is behind them. Reading order, not creation order:
         -- the list is opened to see what is happening, and finished projects are a record.
-        case p.status when 'doing' then 0 when 'idea' then 1 else 2 end,
+        case p.status
+          when 'doing' then 0
+          when 'idea' then 1
+          when 'done' then 2
+          else 3
+        end,
         -- Within a status, the soonest hope first and 'someday' last.
         p.target_year nulls last,
         p.created_at desc`,
@@ -185,10 +191,14 @@ export async function updateProject(
               notes       = case when $4::boolean then $5::text else notes end,
               status      = coalesce($6, status),
               target_year = case when $7::boolean then $8::integer else target_year end,
-              -- Moving a project back off 'done' clears the completion, so the record never says
-              -- "finished on a date" about something that is underway again. The memory it made is
-              -- left alone: that happened.
-              completed_at = case when $6 is not null and $6 <> 'done' then null else completed_at end,
+              -- Closing it either way stamps the moment; reopening clears it, so the record never
+              -- claims a closing date for something that is open again. The memory a finished
+              -- project made is left alone: that happened.
+              completed_at = case
+                when $6 is null then completed_at
+                when $6 in ('done', 'cancelled') then coalesce(completed_at, now())
+                else null
+              end,
               updated_at  = now()
         where id = $2 and couple_id = $1`,
       [
@@ -215,6 +225,33 @@ export async function deleteProject(coupleId: string, id: string): Promise<void>
   // Hard delete, unlike a memory. A project is a plan rather than a record of something that
   // happened, and there is nothing to recover — the memory it may have become is untouched.
   if (rows.length === 0) throw notFound('That project is not on your list');
+}
+
+/**
+ * Push a project back a year.
+ *
+ * A one-tap action rather than a trip through the form, because this is the commonest edit a
+ * dateless list ever gets: the year arrives, the thing did not happen, and it is still wanted. A
+ * project with no target year has nothing to push back — it is already "someday" — so the caller is
+ * told rather than silently given one.
+ */
+export async function postponeProject(coupleId: string, id: string): Promise<Project> {
+  const project = await getProject(coupleId, id);
+  if (project.targetYear === null) {
+    throw badRequest('That one has no year on it — it is already someday');
+  }
+  await query(
+    `update projects
+        set target_year = greatest(target_year + 1, extract(year from now())::integer),
+            -- Pushed back means still wanted, so a closed project comes back open. Nothing else
+            -- would make sense: you cannot postpone something you already finished.
+            status = case when status in ('done', 'cancelled') then 'idea' else status end,
+            completed_at = case when status in ('done', 'cancelled') then null else completed_at end,
+            updated_at = now()
+      where id = $2 and couple_id = $1`,
+    [coupleId, id],
+  );
+  return getProject(coupleId, id);
 }
 
 /**
@@ -248,32 +285,35 @@ export async function setStepDone(
 }
 
 /**
- * Finish a project, and optionally turn it into a memory in the same commit.
+ * Finish a project, which puts it on the timeline.
  *
- * The memory is a real event like any other, so it lands on the timeline, appears in search, holds
- * photos and exports with everything else. Only the link back is special.
+ * Not a choice. Marking a project done is saying it happened, and a thing that happened to the two
+ * of them is a memory — that is the whole premise of the app. Offering "or not" would be offering
+ * to record a milestone nowhere.
+ *
+ * Done in one transaction so `event_id` is never a promise, and idempotent: finishing something
+ * already finished returns what is there rather than minting a second memory for one event.
  */
 export async function completeProject(
   coupleId: string,
   userId: string,
   id: string,
-  options: { becomeMemory?: boolean; eventDate?: string } = {},
-): Promise<{ project: Project; eventId: string | null }> {
+  options: { eventDate?: string } = {},
+): Promise<Project> {
   const project = await getProject(coupleId, id);
-  if (project.eventId && options.becomeMemory) {
-    throw badRequest('That project is already a memory on your timeline');
-  }
 
-  const eventId = await transaction(async (client) => {
-    let created: string | null = null;
+  await transaction(async (client) => {
+    // Already a memory: this is a re-tap, or a project finished, reopened and finished again. The
+    // event it made stands, and a second one would be a duplicate on the story.
+    let eventId = project.eventId;
 
-    if (options.becomeMemory) {
+    if (!eventId) {
       const row = await client.query<{ id: string }>(
         `insert into events (couple_id, created_by, type, title, description, event_date)
          values ($1, $2, 'milestone', $3, $4, $5) returning id`,
         [coupleId, userId, project.title, project.notes, options.eventDate ?? todayIso()],
       );
-      created = row.rows[0]!.id;
+      eventId = row.rows[0]!.id;
     }
 
     await client.query(
@@ -283,12 +323,11 @@ export async function completeProject(
               -- January, the project was finished in January. Falling back to now() covers the
               -- ordinary case of marking something done the day it happened.
               completed_at = coalesce(completed_at, $4::date::timestamptz, now()),
-              event_id = coalesce($3, event_id), updated_at = now()
+              event_id = $3, updated_at = now()
         where id = $2 and couple_id = $1`,
-      [coupleId, id, created, options.eventDate ?? null],
+      [coupleId, id, eventId, options.eventDate ?? null],
     );
-    return created;
   });
 
-  return { project: await getProject(coupleId, id), eventId };
+  return getProject(coupleId, id);
 }

@@ -24,6 +24,7 @@ export const useProjectsStore = defineStore('projects', () => {
   const doing = byStatus('doing');
   const ideas = byStatus('idea');
   const done = byStatus('done');
+  const letGo = byStatus('cancelled');
 
   /** How many steps are ticked across everything underway — the one number worth a glance. */
   const progress = computed(() => {
@@ -91,12 +92,19 @@ export const useProjectsStore = defineStore('projects', () => {
     }
   }
 
-  /** Finish it, and optionally put it on the timeline as a memory in the same request. */
-  async function complete(
-    id: string,
-    options: { becomeMemory?: boolean; eventDate?: string } = {},
-  ): Promise<Project> {
+  /** Finish it. It becomes a memory on the timeline — that is what "done" means here. */
+  async function complete(id: string, options: { eventDate?: string } = {}): Promise<Project> {
     const { project } = await api.post<{ project: Project }>(`/projects/${id}/complete`, options);
+    await load(true);
+    return project;
+  }
+
+  /**
+   * Push it back a year. Computed on the server from what is stored, so two people tapping it in
+   * the same minute add one year rather than two.
+   */
+  async function postpone(id: string): Promise<Project> {
+    const { project } = await api.post<{ project: Project }>(`/projects/${id}/postpone`, {});
     await load(true);
     return project;
   }
@@ -107,7 +115,7 @@ export const useProjectsStore = defineStore('projects', () => {
   }
 
   return {
-    projects, loaded, loading, doing, ideas, done, progress,
-    load, create, update, remove, setStep, complete, absorb, reset,
+    projects, loaded, loading, doing, ideas, done, letGo, progress,
+    load, create, update, remove, setStep, complete, postpone, absorb, reset,
   };
 });

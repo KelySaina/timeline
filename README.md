@@ -256,8 +256,10 @@ sitting in a cache that survives sign-out. Offline gets you the shell and a fail
 - **Things we mean to do** — the wants with no date on them: "learn to dive", "repaint the kitchen".
   Someday → underway → done, whose idea it was, an optional checklist with a progress bar, and a
   hoped-for year that is never a deadline and never sends a reminder. Ticking the first step starts a
-  project; nothing ever auto-finishes it, because finishing is the moment that matters — it offers to
-  put the thing on the timeline as a real memory, linked both ways.
+  project; **nothing ever finishes one by itself** — that is a decision, and taking it puts the thing
+  on the timeline as a real memory, always, because marking a project done is saying it happened.
+  A want can also be **pushed back a year** in one tap, or **let go** without being erased: deciding
+  against something is part of the story too.
 - **Photos** — multiple per memory, re-encoded server side, thumbnails for the timeline, delivered
   through the API and never from a public URL.
 - **Two people, one story** — one live invite link at a time, single use, 14-day expiry.

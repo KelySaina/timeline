@@ -269,7 +269,9 @@ of root credentials.
 | Tests get their own database via TEST_DATABASE_URL | A dev API container on the same database acts on changes the tests publish, and wins the claim | CI already had a dedicated one, which is why this was invisible there |
 | Projects are their own table, not events with a null date | The story sorts by `event_date`; a nullable one would put a hole in the single column everything depends on | `event_id` links a finished project to the memory it became |
 | Project status is stored, not derived from the steps | A project with no steps still has a state, and two of five ticked may mean paused | Ticking the first step promotes an idea to underway; nothing auto-finishes |
-| Finishing mints the memory in the same transaction | Otherwise there is a window where the project is done and the story does not know | `event_id` is never a promise |
+| Finishing always mints the memory, in the same transaction | Marking a project done is saying it happened, and a thing that happened to the two of them is a memory — offering "or not" offers to record a milestone nowhere | Idempotent: finishing twice returns the one event |
+| Letting go is a status, not a delete | A diary that records only what went well is not a record of what they wanted | `completed_at` means "when it closed", either way |
+| Postponing is a POST, not a client-side PATCH | The new year is computed from what is stored, so two people tapping in the same minute add one year and not two | Pushing back something closed reopens it |
 | Steps are replaced as a whole list, ticking is its own endpoint | A checklist is edited as a list; a tick happens constantly and cannot afford to send one | Ticks survive an edit, matched by wording |
 | Docker Compose (db + api + web) | One command to run the whole stack | Same images deploy to a real host |
 | Live updates over SSE, not WebSocket | Traffic is one-directional, rides the session cookie, needs no upgrade through nginx/Traefik, browser owns the reconnect | Bidirectional features (typing, presence) would need the upgrade |

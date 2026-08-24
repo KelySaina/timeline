@@ -106,21 +106,28 @@ async function move(project: Project, status: ProjectStatus): Promise<void> {
 }
 
 /**
- * Finishing. The offer to make it a memory is the point of the whole feature, so it is a prompt
- * rather than a setting — and taking it is one tap, not a form.
+ * Finishing. It becomes a memory, always — marking a project done is saying it happened, and a thing
+ * that happened to the two of them belongs on the timeline. Offering "or not" would be offering to
+ * record a milestone nowhere.
  */
-async function finish(project: Project, becomeMemory: boolean): Promise<void> {
+async function finish(project: Project, eventDate: string): Promise<void> {
   try {
-    const done = await projects.complete(project.id, { becomeMemory });
-    if (becomeMemory && done.eventId) {
-      // The story has a new row; the timeline screen must not still be showing the old one.
-      await timeline.refresh();
-      toasts.push('Done — and it is on your timeline', 'warm');
-    } else {
-      toasts.push('Done', 'warm');
-    }
+    await projects.complete(project.id, { eventDate });
+    // The story has a new row, and the timeline screen must not still be showing the old one.
+    await timeline.refresh();
+    toasts.push('Done — and it is on your timeline', 'warm');
   } catch {
     toasts.error('Could not finish that');
+  }
+}
+
+/** Push it back a year, for the commonest thing that happens to a dateless want. */
+async function postpone(project: Project): Promise<void> {
+  try {
+    const moved = await projects.postpone(project.id);
+    toasts.push(`Pushed back to ${moved.targetYear}`);
+  } catch {
+    toasts.error('Could not move that');
   }
 }
 
@@ -174,6 +181,7 @@ async function remove(project: Project): Promise<void> {
             @edit="openEdit(project)"
             @move="move(project, $event)"
             @finish="finish(project, $event)"
+            @postpone="postpone(project)"
             @open-memory="openMemory(project)"
             @remove="remove(project)"
           />
@@ -191,6 +199,7 @@ async function remove(project: Project): Promise<void> {
             @edit="openEdit(project)"
             @move="move(project, $event)"
             @finish="finish(project, $event)"
+            @postpone="postpone(project)"
             @open-memory="openMemory(project)"
             @remove="remove(project)"
           />
@@ -208,6 +217,29 @@ async function remove(project: Project): Promise<void> {
             @edit="openEdit(project)"
             @move="move(project, $event)"
             @finish="finish(project, $event)"
+            @postpone="postpone(project)"
+            @open-memory="openMemory(project)"
+            @remove="remove(project)"
+          />
+        </div>
+      </section>
+
+      <!--
+        Kept, and kept quiet. A diary that records only what went well is not a record of what the
+        two of them wanted — but it does not need to be the loudest thing on the page either.
+      -->
+      <section v-if="projects.letGo.length" class="mb-8">
+        <h2 class="eyebrow">Let go</h2>
+        <div class="space-y-3">
+          <ProjectCard
+            v-for="project in projects.letGo"
+            :key="project.id"
+            :project="project"
+            @tick="tick(project, $event.stepId, $event.done)"
+            @edit="openEdit(project)"
+            @move="move(project, $event)"
+            @finish="finish(project, $event)"
+            @postpone="postpone(project)"
             @open-memory="openMemory(project)"
             @remove="remove(project)"
           />
@@ -247,6 +279,7 @@ async function remove(project: Project): Promise<void> {
               <option value="idea">Someday</option>
               <option value="doing">Underway</option>
               <option value="done">Done</option>
+              <option value="cancelled">Let go</option>
             </select>
           </div>
           <div>

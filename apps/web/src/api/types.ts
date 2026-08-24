@@ -157,7 +157,7 @@ export type Summary = {
  * Projects — the wants with no date on them yet
  * ------------------------------------------------------------------------------------------ */
 
-export type ProjectStatus = 'idea' | 'doing' | 'done';
+export type ProjectStatus = 'idea' | 'doing' | 'done' | 'cancelled';
 
 export type ProjectStep = { id: string; title: string; done: boolean };
 

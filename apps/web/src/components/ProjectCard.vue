@@ -14,42 +14,54 @@ const emit = defineEmits<{
   tick: [{ stepId: string; done: boolean }];
   edit: [];
   move: [ProjectStatus];
-  finish: [boolean];
+  finish: [string];
+  postpone: [];
   openMemory: [];
   remove: [];
 }>();
 
 const menu = ref(false);
 const confirmingFinish = ref(false);
+/** Defaults to today, because most things are marked done the day they happen. */
+const finishedOn = ref(new Date().toISOString().slice(0, 10));
 
 const ticked = computed(() => props.project.steps.filter((step) => step.done).length);
 const total = computed(() => props.project.steps.length);
 const fraction = computed(() => (total.value ? ticked.value / total.value : 0));
 
 const isDone = computed(() => props.project.status === 'done');
+const isLetGo = computed(() => props.project.status === 'cancelled');
+const isClosed = computed(() => isDone.value || isLetGo.value);
 
 /** "2027", or nothing at all. A missing year is "someday", which the section heading already says. */
 const target = computed(() => (props.project.targetYear ? String(props.project.targetYear) : null));
 
-const completedOn = computed(() =>
-  props.project.completedAt ? new Date(props.project.completedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null,
+const closedOn = computed(() =>
+  props.project.completedAt
+    ? new Date(props.project.completedAt).toLocaleDateString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : null,
 );
 </script>
 
 <template>
-  <article class="card px-4 py-3.5 sm:px-5" :class="isDone && 'opacity-80'">
+  <article class="card px-4 py-3.5 sm:px-5" :class="isClosed && 'opacity-80'">
     <div class="flex items-start gap-3">
       <div class="min-w-0 flex-1">
         <h3
           class="display text-[1.1rem] leading-snug text-ink"
-          :class="isDone && 'line-through decoration-[var(--line-strong)]'"
+          :class="isClosed && 'line-through decoration-[var(--line-strong)]'"
         >
           {{ project.title }}
         </h3>
         <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.7rem] text-muted">
           <span>{{ project.author.displayName }}'s idea</span>
           <span v-if="target" class="tabular-nums">· hoping for {{ target }}</span>
-          <span v-if="isDone && completedOn">· done {{ completedOn }}</span>
+          <span v-if="isDone && closedOn">· done {{ closedOn }}</span>
+          <span v-else-if="isLetGo && closedOn">· let go {{ closedOn }}</span>
         </p>
       </div>
 
@@ -86,6 +98,32 @@ const completedOn = computed(() =>
             @click="emit('move', 'idea'); menu = false"
           >
             <FaIcon icon="clock" class="text-[0.7rem]" />Back to someday
+          </button>
+          <!-- Only means something when there is a year to push. "Someday" is already pushed back. -->
+          <button
+            v-if="project.targetYear"
+            class="menu-item"
+            @click="emit('postpone'); menu = false"
+          >
+            <FaIcon icon="calendar-day" class="text-[0.7rem]" />Push it to {{ project.targetYear + 1 }}
+          </button>
+          <!--
+            Letting go is not removing. Deciding against something is part of the story too — a diary
+            that only records what went well is not a record of what you wanted.
+          -->
+          <button
+            v-if="!isLetGo"
+            class="menu-item"
+            @click="emit('move', 'cancelled'); menu = false"
+          >
+            <FaIcon icon="xmark" class="text-[0.7rem]" />Let it go
+          </button>
+          <button
+            v-if="isLetGo"
+            class="menu-item"
+            @click="emit('move', 'idea'); menu = false"
+          >
+            <FaIcon icon="star" class="text-[0.7rem]" />Want it again
           </button>
           <button class="menu-item text-[var(--ember)]" @click="emit('remove'); menu = false">
             <FaIcon icon="trash-can" class="text-[0.7rem]" />Remove
@@ -129,22 +167,34 @@ const completedOn = computed(() =>
       </ul>
     </div>
 
-    <!-- Finishing, and the offer that makes this a timeline app rather than a todo list. -->
-    <div v-if="!isDone" class="mt-3.5 border-t border-line pt-3">
+    <!--
+      Finishing. It becomes a memory — that is what done means here, so there is nothing to decide,
+      only a date to confirm. Today by default, because most things are marked done the day they
+      happen; a field because "we finally did it" is often remembered a week later.
+    -->
+    <div v-if="!isClosed" class="mt-3.5 border-t border-line pt-3">
       <div v-if="!confirmingFinish" class="flex justify-end">
         <button class="chip" @click="confirmingFinish = true">
           <FaIcon icon="check" class="text-[0.6rem]" />We did it
         </button>
       </div>
       <div v-else class="space-y-2">
-        <p class="text-[0.8125rem] text-ink-soft">Put it on the timeline as a memory?</p>
-        <div class="flex flex-wrap justify-end gap-2">
+        <label class="block text-[0.8125rem] text-ink-soft" :for="`finished-${project.id}`">
+          When? It joins your timeline as a memory.
+        </label>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <input
+            :id="`finished-${project.id}`"
+            v-model="finishedOn"
+            type="date"
+            class="field !h-8 !w-auto flex-1 !py-0 !text-[0.8125rem] tabular-nums"
+          />
           <button class="chip" @click="confirmingFinish = false">Cancel</button>
-          <button class="chip" @click="emit('finish', false); confirmingFinish = false">
-            Just mark it done
-          </button>
-          <button class="chip !border-[var(--ember)] !text-[var(--ember)]" @click="emit('finish', true); confirmingFinish = false">
-            <FaIcon icon="heart" class="text-[0.6rem]" />Yes, add it
+          <button
+            class="chip !border-[var(--ember)] !text-[var(--ember)]"
+            @click="emit('finish', finishedOn); confirmingFinish = false"
+          >
+            <FaIcon icon="heart" class="text-[0.6rem]" />Add it
           </button>
         </div>
       </div>
