@@ -163,6 +163,8 @@ export type ProjectStep = { id: string; title: string; done: boolean };
 
 export type Project = {
   id: string;
+  /** The same nine kinds a memory has: this is what the finished project becomes. */
+  type: EventType;
   title: string;
   notes: string | null;
   status: ProjectStatus;
@@ -178,6 +180,7 @@ export type Project = {
 };
 
 export type ProjectDraft = {
+  type?: EventType;
   title: string;
   notes?: string | null;
   status?: ProjectStatus;

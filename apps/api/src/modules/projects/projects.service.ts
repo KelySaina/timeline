@@ -21,6 +21,7 @@ import type { PoolClient } from 'pg';
 import { query, queryOne, transaction } from '../../db/pool.js';
 import { badRequest, notFound } from '../../lib/errors.js';
 import { todayIso } from '../../lib/dates.js';
+import type { EventType } from '../events/events.types.js';
 
 export type ProjectStatus = 'idea' | 'doing' | 'done' | 'cancelled';
 
@@ -28,6 +29,8 @@ export type ProjectStep = { id: string; title: string; done: boolean };
 
 export type Project = {
   id: string;
+  /** The same nine kinds a memory has: this is what the finished project becomes. */
+  type: EventType;
   title: string;
   notes: string | null;
   status: ProjectStatus;
@@ -45,6 +48,7 @@ export type Project = {
 
 type Row = {
   id: string;
+  type: EventType;
   title: string;
   notes: string | null;
   status: ProjectStatus;
@@ -59,7 +63,7 @@ type Row = {
 };
 
 const SELECT = `
-  select p.id, p.title, p.notes, p.status, p.target_year, p.completed_at, p.event_id,
+  select p.id, p.type, p.title, p.notes, p.status, p.target_year, p.completed_at, p.event_id,
          p.created_at, p.updated_at,
          u.id as author_id, u.display_name as author_name,
          coalesce((
@@ -73,6 +77,7 @@ const SELECT = `
 
 const toProject = (row: Row): Project => ({
   id: row.id,
+  type: row.type,
   title: row.title,
   notes: row.notes,
   status: row.status,
@@ -113,6 +118,7 @@ export async function getProject(coupleId: string, id: string): Promise<Project>
 }
 
 export type ProjectInput = {
+  type?: EventType;
   title: string;
   notes?: string | null;
   status?: ProjectStatus;
@@ -160,8 +166,8 @@ export async function createProject(
 ): Promise<Project> {
   const id = await transaction(async (client) => {
     const created = await client.query<{ id: string }>(
-      `insert into projects (couple_id, created_by, title, notes, status, target_year)
-       values ($1, $2, $3, $4, coalesce($5, 'idea'), $6) returning id`,
+      `insert into projects (couple_id, created_by, type, title, notes, status, target_year)
+       values ($1, $2, coalesce($7, 'milestone'), $3, $4, coalesce($5, 'idea'), $6) returning id`,
       [
         coupleId,
         userId,
@@ -169,6 +175,7 @@ export async function createProject(
         input.notes?.trim() || null,
         input.status ?? null,
         input.targetYear ?? null,
+        input.type ?? null,
       ],
     );
     const projectId = created.rows[0]!.id;
@@ -187,7 +194,8 @@ export async function updateProject(
   await transaction(async (client) => {
     await client.query(
       `update projects
-          set title       = coalesce($3, title),
+          set type        = coalesce($9, type),
+              title       = coalesce($3, title),
               notes       = case when $4::boolean then $5::text else notes end,
               status      = coalesce($6, status),
               target_year = case when $7::boolean then $8::integer else target_year end,
@@ -210,6 +218,7 @@ export async function updateProject(
         patch.status ?? null,
         patch.targetYear !== undefined,
         patch.targetYear ?? null,
+        patch.type ?? null,
       ],
     );
     if (patch.steps !== undefined) await replaceSteps(client, coupleId, id, patch.steps);
@@ -310,8 +319,8 @@ export async function completeProject(
     if (!eventId) {
       const row = await client.query<{ id: string }>(
         `insert into events (couple_id, created_by, type, title, description, event_date)
-         values ($1, $2, 'milestone', $3, $4, $5) returning id`,
-        [coupleId, userId, project.title, project.notes, options.eventDate ?? todayIso()],
+         values ($1, $2, $6, $3, $4, $5) returning id`,
+        [coupleId, userId, project.title, project.notes, options.eventDate ?? todayIso(), project.type],
       );
       eventId = row.rows[0]!.id;
     }

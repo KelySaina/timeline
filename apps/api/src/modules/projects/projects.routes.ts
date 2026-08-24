@@ -10,6 +10,7 @@ import { requireCouple } from '../../middleware/coupleContext.js';
 import { requireUser, verifyCsrf } from '../../middleware/session.js';
 import { valid, validate } from '../../middleware/validate.js';
 import { notify } from '../realtime/notify.js';
+import { EVENT_TYPES } from '../events/events.types.js';
 import * as service from './projects.service.js';
 
 export const projectsRouter = Router();
@@ -19,6 +20,8 @@ const idParam = z.object({ id: z.string().uuid() });
 const stepParams = z.object({ id: z.string().uuid(), stepId: z.string().uuid() });
 
 const bodySchema = z.object({
+  // The same nine as a memory, because that is what a finished project turns into.
+  type: z.enum(EVENT_TYPES).optional(),
   title: z.string().trim().min(1, 'Give it a name').max(140),
   notes: z.string().trim().max(2000).nullish(),
   status: z.enum(['idea', 'doing', 'done', 'cancelled']).optional(),

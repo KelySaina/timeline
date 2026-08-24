@@ -254,7 +254,8 @@ sitting in a cache that survives sign-out. Offline gets you the shell and a fail
 - **Upcoming** — anniversaries and birthdays derived from the couple's own profile, plus future
   plans, with countdowns. Yearly dates are computed on read, so nothing drifts.
 - **Things we mean to do** — the wants with no date on them: "learn to dive", "repaint the kitchen".
-  Someday → underway → done, whose idea it was, an optional checklist with a progress bar, and a
+  Each carries one of the same nine kinds a memory has — a trip is a trip before it happens — and the
+  memory it becomes inherits it. Someday → underway → done, whose idea it was, an optional checklist with a progress bar, and a
   hoped-for year that is never a deadline and never sends a reminder. Ticking the first step starts a
   project; **nothing ever finishes one by itself** — that is a decision, and taking it puts the thing
   on the timeline as a real memory, always, because marking a project done is saying it happened.

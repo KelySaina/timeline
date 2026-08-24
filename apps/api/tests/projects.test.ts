@@ -67,8 +67,13 @@ describe('projects', () => {
     const user = await signup('Dreamer');
     await call(user, 'POST', '/api/couples', {});
 
-    const someday = await call(user, 'POST', '/api/projects', { title: 'Go to Japan', targetYear: 2028 });
+    const someday = await call(user, 'POST', '/api/projects', {
+      title: 'Go to Japan',
+      type: 'trip',
+      targetYear: 2028,
+    });
     assert.equal(someday.status, 201);
+    assert.equal(someday.body.project.type, 'trip', 'a project knows what kind of thing it is');
     assert.equal(someday.body.project.status, 'idea', 'a new project is a want until it is started');
     assert.equal(someday.body.project.targetYear, 2028);
     assert.equal(someday.body.project.author.displayName, 'Dreamer', 'whose idea it was');
@@ -78,6 +83,7 @@ describe('projects', () => {
     // No year at all is a real answer, not a missing one.
     const vague = await call(user, 'POST', '/api/projects', { title: 'Grow tomatoes' });
     assert.equal(vague.body.project.targetYear, null);
+    assert.equal(vague.body.project.type, 'milestone', 'and a kind is not compulsory either');
 
     await call(user, 'POST', '/api/projects', { title: 'Repaint the kitchen', status: 'doing' });
 
@@ -166,6 +172,7 @@ describe('projects', () => {
     await call(user, 'POST', '/api/couples', {});
     const created = await call(user, 'POST', '/api/projects', {
       title: 'Learn to dive',
+      type: 'celebration',
       notes: 'Both of us, properly certified.',
       status: 'doing',
     });
@@ -186,6 +193,9 @@ describe('projects', () => {
     assert.equal(event.body.event.title, 'Learn to dive');
     assert.equal(event.body.event.description, 'Both of us, properly certified.');
     assert.equal(event.body.event.eventDate, '2026-05-05');
+    // The memory takes the project's kind rather than a hardcoded one — the whole reason a project
+    // carries a type at all.
+    assert.equal(event.body.event.type, 'celebration');
     assert.equal((await call(user, 'GET', '/api/search?q=dive')).body.total, 1);
 
     // Finishing twice — a re-tap, or finished, reopened and finished again — must not put a second
@@ -206,6 +216,20 @@ describe('projects', () => {
     assert.equal(done.body.project.status, 'done');
     assert.ok(done.body.project.eventId);
     assert.equal((await call(user, 'GET', '/api/events?scope=all')).body.total, 1);
+  });
+
+  it('carries a changed kind through to the memory', async () => {
+    const user = await signup('Reclassifier');
+    await call(user, 'POST', '/api/couples', {});
+    const created = await call(user, 'POST', '/api/projects', { title: 'Nosy Be', type: 'milestone' });
+    const id = created.body.project.id;
+
+    const retyped = await call(user, 'PATCH', `/api/projects/${id}`, { type: 'trip' });
+    assert.equal(retyped.body.project.type, 'trip');
+
+    const done = await call(user, 'POST', `/api/projects/${id}/complete`, {});
+    const event = await call(user, 'GET', `/api/events/${done.body.project.eventId}`);
+    assert.equal(event.body.event.type, 'trip');
   });
 
   it('lets a project be let go, and wanted again', async () => {
@@ -324,5 +348,6 @@ describe('projects', () => {
     assert.equal((await call(user, 'POST', '/api/projects', { title: '   ' })).status, 400);
     assert.equal((await call(user, 'POST', '/api/projects', { title: 'x', targetYear: 20260 })).status, 400);
     assert.equal((await call(user, 'POST', '/api/projects', { title: 'x', status: 'maybe' })).status, 400);
+    assert.equal((await call(user, 'POST', '/api/projects', { title: 'x', type: 'wedding' })).status, 400);
   });
 });

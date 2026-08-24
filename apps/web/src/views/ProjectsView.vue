@@ -9,7 +9,7 @@
  */
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import type { Project, ProjectStatus } from '@/api/types';
+import type { EventType, Project, ProjectStatus } from '@/api/types';
 import { useProjectsStore } from '@/stores/projects';
 import { useTimelineStore } from '@/stores/timeline';
 import { useToastStore } from '@/stores/toast';
@@ -17,6 +17,7 @@ import { useUiStore } from '@/stores/ui';
 import AppButton from '@/components/ui/AppButton.vue';
 import AppSheet from '@/components/ui/AppSheet.vue';
 import ProjectCard from '@/components/ProjectCard.vue';
+import TypePicker from '@/components/ui/TypePicker.vue';
 
 const projects = useProjectsStore();
 const timeline = useTimelineStore();
@@ -28,7 +29,16 @@ const sheetOpen = ref(false);
 const editing = ref<Project | null>(null);
 const saving = ref(false);
 
-const form = ref<{ title: string; notes: string; status: ProjectStatus; targetYear: string; steps: string }>({
+const form = ref<{
+  type: EventType;
+  title: string;
+  notes: string;
+  status: ProjectStatus;
+  targetYear: string;
+  steps: string;
+}>({
+  // The kind of thing it is, which the memory inherits when it is finished.
+  type: 'milestone',
   title: '',
   notes: '',
   status: 'idea',
@@ -46,13 +56,14 @@ onMounted(() => {
 
 function openNew(): void {
   editing.value = null;
-  form.value = { title: '', notes: '', status: 'idea', targetYear: '', steps: '' };
+  form.value = { type: 'milestone', title: '', notes: '', status: 'idea', targetYear: '', steps: '' };
   sheetOpen.value = true;
 }
 
 function openEdit(project: Project): void {
   editing.value = project;
   form.value = {
+    type: project.type,
     title: project.title,
     notes: project.notes ?? '',
     status: project.status,
@@ -69,6 +80,7 @@ async function save(): Promise<void> {
   saving.value = true;
   try {
     const draft = {
+      type: form.value.type,
       title,
       notes: form.value.notes.trim() || null,
       status: form.value.status,
@@ -261,6 +273,14 @@ async function remove(project: Project): Promise<void> {
       @close="sheetOpen = false"
     >
       <div class="space-y-4">
+        <div>
+          <span class="label">What kind of thing</span>
+          <TypePicker v-model="form.type" />
+          <p class="mt-1.5 text-[0.7rem] text-muted">
+            The memory inherits this when you finish it.
+          </p>
+        </div>
+
         <div>
           <label class="label" for="project-title">What is it?</label>
           <input

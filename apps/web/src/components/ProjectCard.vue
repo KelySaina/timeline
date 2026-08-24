@@ -8,6 +8,7 @@
  */
 import { computed, ref } from 'vue';
 import type { Project, ProjectStatus } from '@/api/types';
+import { typeMeta } from '@/lib/eventTypes';
 
 const props = defineProps<{ project: Project }>();
 const emit = defineEmits<{
@@ -24,6 +25,9 @@ const menu = ref(false);
 const confirmingFinish = ref(false);
 /** Defaults to today, because most things are marked done the day they happen. */
 const finishedOn = ref(new Date().toISOString().slice(0, 10));
+
+/** The same icon and colour the memory will carry, so the two screens agree about what this is. */
+const meta = computed(() => typeMeta(props.project.type));
 
 const ticked = computed(() => props.project.steps.filter((step) => step.done).length);
 const total = computed(() => props.project.steps.length);
@@ -50,6 +54,14 @@ const closedOn = computed(() =>
 <template>
   <article class="card px-4 py-3.5 sm:px-5" :class="isClosed && 'opacity-80'">
     <div class="flex items-start gap-3">
+      <span
+        class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full"
+        :style="{ background: `color-mix(in oklab, ${meta.color} 16%, transparent)`, color: meta.color }"
+        :title="meta.label"
+      >
+        <FaIcon :icon="meta.icon" class="text-[0.75rem]" />
+      </span>
+
       <div class="min-w-0 flex-1">
         <h3
           class="display text-[1.1rem] leading-snug text-ink"
