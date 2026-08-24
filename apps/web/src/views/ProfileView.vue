@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ApiError } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
+import { useProjectsStore } from '@/stores/projects';
 import { useTimelineStore } from '@/stores/timeline';
 import { useToastStore } from '@/stores/toast';
 import { formatEventDate, possessive } from '@/lib/format';
@@ -62,6 +63,9 @@ async function pickAvatar(event: Event): Promise<void> {
 async function signOut(): Promise<void> {
   await auth.logout();
   timeline.reset();
+  // Cleared too, or the next person to sign in on this device sees the previous couple's list for
+  // as long as it takes the first fetch to answer.
+  useProjectsStore().reset();
   await router.replace({ name: 'auth' });
 }
 </script>
@@ -180,6 +184,17 @@ async function signOut(): Promise<void> {
     </section>
 
     <section class="card mt-4 divide-y divide-[var(--line)]">
+      <RouterLink :to="{ name: 'projects' }" class="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-[var(--surface-sunk)]">
+        <FaIcon icon="star" class="text-muted" />
+        <span class="min-w-0 flex-1 text-[0.9375rem]">
+          Things we mean to do
+          <span class="block truncate text-[0.75rem] text-muted">
+            Wants with no date on them. Finishing one can put it on the timeline.
+          </span>
+        </span>
+        <FaIcon icon="chevron-right" class="shrink-0 text-[0.75rem] text-muted" />
+      </RouterLink>
+
       <RouterLink :to="{ name: 'story' }" class="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-[var(--surface-sunk)]">
         <FaIcon icon="sort" class="text-muted" />
         <span class="min-w-0 flex-1 text-[0.9375rem]">

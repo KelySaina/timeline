@@ -152,3 +152,35 @@ export type Summary = {
   lastDate: string | null;
   upcomingCount: number;
 };
+
+/* ---------------------------------------------------------------------------------------------
+ * Projects — the wants with no date on them yet
+ * ------------------------------------------------------------------------------------------ */
+
+export type ProjectStatus = 'idea' | 'doing' | 'done';
+
+export type ProjectStep = { id: string; title: string; done: boolean };
+
+export type Project = {
+  id: string;
+  title: string;
+  notes: string | null;
+  status: ProjectStatus;
+  /** A hope, never a deadline. Null is "someday". */
+  targetYear: number | null;
+  author: { id: string; displayName: string };
+  completedAt: string | null;
+  /** The memory this became, if it was finished into one. */
+  eventId: string | null;
+  steps: ProjectStep[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectDraft = {
+  title: string;
+  notes?: string | null;
+  status?: ProjectStatus;
+  targetYear?: number | null;
+  steps?: string[];
+};

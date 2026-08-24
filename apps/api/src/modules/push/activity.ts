@@ -75,6 +75,28 @@ async function describe(
     };
   }
 
+  if (change.kind === 'project.changed' && change.id) {
+    /*
+     * Only a project that is *new* is news. 'project.changed' also fires for every ticked step and
+     * every edit, which is housekeeping — and a checklist being worked through would be the noisiest
+     * notification in the app. Told apart by age rather than by a separate change kind, because the
+     * bus carries a nudge and adding kinds for the sender's benefit would push detail into it that
+     * the streams do not need.
+     */
+    const row = await queryOne<{ title: string; fresh: boolean }>(
+      `select title, created_at > now() - interval '30 seconds' as fresh
+         from projects where id = $1 and couple_id = $2`,
+      [change.id, change.couple],
+    );
+    if (!row?.fresh) return null;
+    return {
+      title: `${actorName} added a project`,
+      body: truncate(row.title),
+      url: '/projects',
+      tag: `project:${change.id}`,
+    };
+  }
+
   if (change.kind !== 'event.created' || !change.id) return null;
 
   const title = await eventTitle(change.couple, change.id);

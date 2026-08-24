@@ -11,6 +11,7 @@ import { couplesRouter } from './modules/couples/couples.routes.js';
 import { eventsRouter, searchRouter } from './modules/events/events.routes.js';
 import { exportRouter } from './modules/export/export.routes.js';
 import { photosRouter } from './modules/photos/photos.routes.js';
+import { projectsRouter } from './modules/projects/projects.routes.js';
 import { pushRouter } from './modules/push/push.routes.js';
 import { realtimeRouter } from './modules/realtime/realtime.routes.js';
 import { upcomingRouter } from './modules/recurring/recurring.routes.js';
@@ -45,7 +46,7 @@ export function createApp() {
    * there is anyone to be reminded about.
    */
   api.use(authRouter, couplesRouter, pushRouter);
-  api.use(eventsRouter, searchRouter, upcomingRouter, photosRouter, exportRouter, realtimeRouter);
+  api.use(eventsRouter, searchRouter, upcomingRouter, photosRouter, projectsRouter, exportRouter, realtimeRouter);
   app.use('/api', api);
 
   app.use(notFoundHandler);

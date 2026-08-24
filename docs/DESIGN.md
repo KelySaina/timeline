@@ -267,6 +267,10 @@ of root credentials.
 | Reminders for plans live on `events.remind_days_before`, nullable | Most memories are in the past; a default would arm a reminder on every one of them | A past date keeps its value and never fires |
 | The device list is not gated on this browser being subscribed | The case it exists for is a phone you are not holding, so the browser needing it most is often one that cannot receive | Hidden only when the one device is this one |
 | Tests get their own database via TEST_DATABASE_URL | A dev API container on the same database acts on changes the tests publish, and wins the claim | CI already had a dedicated one, which is why this was invisible there |
+| Projects are their own table, not events with a null date | The story sorts by `event_date`; a nullable one would put a hole in the single column everything depends on | `event_id` links a finished project to the memory it became |
+| Project status is stored, not derived from the steps | A project with no steps still has a state, and two of five ticked may mean paused | Ticking the first step promotes an idea to underway; nothing auto-finishes |
+| Finishing mints the memory in the same transaction | Otherwise there is a window where the project is done and the story does not know | `event_id` is never a promise |
+| Steps are replaced as a whole list, ticking is its own endpoint | A checklist is edited as a list; a tick happens constantly and cannot afford to send one | Ticks survive an edit, matched by wording |
 | Docker Compose (db + api + web) | One command to run the whole stack | Same images deploy to a real host |
 | Live updates over SSE, not WebSocket | Traffic is one-directional, rides the session cookie, needs no upgrade through nginx/Traefik, browser owns the reconnect | Bidirectional features (typing, presence) would need the upgrade |
 | The stream carries a nudge, not content | Every update is re-read through the normal endpoint, so the couple check stays on the read path and a stream cannot leak what an endpoint would refuse | Payloads could carry rows later; the authz cost is the reason not to |

@@ -167,6 +167,22 @@ async function open(item: UpcomingItem): Promise<void> {
       </ul>
     </section>
 
+    <!--
+      The other kind of future. Linked from here because this is the screen someone opens when they
+      are thinking about what is ahead, and half of that has no date on it.
+    -->
+    <RouterLink
+      :to="{ name: 'projects' }"
+      class="card mb-7 flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--surface-sunk)] sm:px-5"
+    >
+      <FaIcon icon="star" class="shrink-0 text-[0.85rem] text-[var(--ember)]" />
+      <span class="min-w-0 flex-1">
+        <span class="block text-[0.9375rem] text-ink">Things we mean to do</span>
+        <span class="block text-[0.75rem] text-muted">The ones without a date yet.</span>
+      </span>
+      <FaIcon icon="chevron-right" class="shrink-0 text-[0.75rem] text-muted" />
+    </RouterLink>
+
     <section>
       <div class="mb-2.5 flex items-center justify-between">
         <h2 class="eyebrow mb-0">Plans on the timeline</h2>

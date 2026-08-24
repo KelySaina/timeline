@@ -253,6 +253,11 @@ sitting in a cache that survives sign-out. Offline gets you the shell and a fail
   rather than a recovery.
 - **Upcoming** — anniversaries and birthdays derived from the couple's own profile, plus future
   plans, with countdowns. Yearly dates are computed on read, so nothing drifts.
+- **Things we mean to do** — the wants with no date on them: "learn to dive", "repaint the kitchen".
+  Someday → underway → done, whose idea it was, an optional checklist with a progress bar, and a
+  hoped-for year that is never a deadline and never sends a reminder. Ticking the first step starts a
+  project; nothing ever auto-finishes it, because finishing is the moment that matters — it offers to
+  put the thing on the timeline as a real memory, linked both ways.
 - **Photos** — multiple per memory, re-encoded server side, thumbnails for the timeline, delivered
   through the API and never from a public URL.
 - **Two people, one story** — one live invite link at a time, single use, 14-day expiry.
@@ -396,5 +401,5 @@ cheaper assertion. That was a real bug, caught exactly that way.
 
 ## Not built yet (by design)
 
-AI recaps, bucket lists, print, video and voice memories, sharing.
+AI recaps, print, video and voice memories, sharing.
 `docs/DESIGN.md` §8 records where each one attaches.

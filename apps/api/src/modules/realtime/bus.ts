@@ -25,7 +25,8 @@ export type ChangeKind =
   | 'event.deleted'
   | 'couple.updated'
   | 'member.joined'
-  | 'recurring.changed';
+  | 'recurring.changed'
+  | 'project.changed';
 
 export type Change = {
   /** Which couple the change belongs to. Every subscriber is filtered on this. */

@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { clientId } from '@/api/client';
 import { useAuthStore } from '@/stores/auth';
+import { useProjectsStore } from '@/stores/projects';
 import { useTimelineStore } from '@/stores/timeline';
 import { useToastStore } from '@/stores/toast';
 import { useUiStore } from '@/stores/ui';
@@ -12,7 +13,8 @@ type ChangeKind =
   | 'event.deleted'
   | 'couple.updated'
   | 'member.joined'
-  | 'recurring.changed';
+  | 'recurring.changed'
+  | 'project.changed';
 
 type Change = { couple: string; kind: ChangeKind; id?: string; actor?: string; origin?: string };
 
@@ -79,6 +81,16 @@ export const useRealtimeStore = defineStore('realtime', () => {
       }
       case 'recurring.changed': {
         await timeline.loadUpcoming();
+        return;
+      }
+      case 'project.changed': {
+        /*
+         * Reloaded only when the list has already been looked at. Ticking a step should reach the
+         * other person's screen within seconds, but fetching a list they have not opened — on every
+         * tick — would be work for nothing.
+         */
+        const projects = useProjectsStore();
+        if (projects.loaded) await projects.load(true);
         return;
       }
     }
