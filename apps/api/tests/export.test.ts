@@ -209,6 +209,70 @@ describe('export', () => {
     assert.deepEqual(data.memories[0].photos, [photos[0]]);
   });
 
+  it('carries the projects too, including the ones let go', async () => {
+    const user = await signup('Planner');
+    await call(user, 'POST', '/api/couples', {});
+
+    await call(user, 'POST', '/api/projects', {
+      title: 'Go to Japan',
+      type: 'trip',
+      targetYear: 2028,
+      notes: 'Cherry blossom, if the timing works.',
+      steps: ['Renew passports', 'Book flights'],
+    });
+    const doing = await call(user, 'POST', '/api/projects', {
+      title: 'Repaint the kitchen',
+      status: 'doing',
+      steps: ['Choose a colour', 'Buy the paint'],
+    });
+    await call(user, 'PATCH', `/api/projects/${doing.body.project.id}/steps/${doing.body.project.steps[0].id}`, {
+      done: true,
+    });
+    await call(user, 'POST', '/api/projects', { title: 'Move to Paris', status: 'cancelled' });
+    const finished = await call(user, 'POST', '/api/projects', { title: 'Learn to dive', type: 'celebration' });
+    await call(user, 'POST', `/api/projects/${finished.body.project.id}/complete`, { eventDate: '2026-03-03' });
+
+    const archive = await download(user);
+    assert.equal(archive.status, 200, archive.bytes.toString('utf8').slice(0, 300));
+    const files = await unzip(archive.bytes);
+    const data = JSON.parse(files.get('timeline.json')!.toString('utf8'));
+
+    assert.equal(data.projects.length, 4);
+    const byTitle = Object.fromEntries(data.projects.map((p: { title: string }) => [p.title, p]));
+
+    assert.equal(byTitle['Go to Japan'].type, 'trip');
+    assert.equal(byTitle['Go to Japan'].targetYear, 2028);
+    assert.equal(byTitle['Go to Japan'].author, 'Planner');
+    assert.deepEqual(byTitle['Go to Japan'].steps, [
+      { title: 'Renew passports', done: false },
+      { title: 'Book flights', done: false },
+    ]);
+    assert.equal(byTitle['Repaint the kitchen'].steps[0].done, true, 'a ticked step is recorded as ticked');
+
+    // The whole reason this is in the archive: what they decided against is part of what they wanted.
+    assert.equal(byTitle['Move to Paris'].status, 'cancelled');
+    assert.ok(byTitle['Move to Paris'].closedAt);
+
+    // The link is a name, because the archive has no database to resolve an id against.
+    assert.equal(byTitle['Learn to dive'].becameMemory, 'Learn to dive');
+    assert.equal(byTitle['Go to Japan'].becameMemory, null);
+
+    // And the readable page carries them, under their own headings.
+    const html = files.get('timeline.html')!.toString('utf8');
+    assert.ok(html.includes('Things we meant to do'));
+    for (const heading of ['Underway', 'Someday', 'Done', 'Let go']) {
+      assert.ok(html.includes(`<h2>${heading}</h2>`), `${heading} section`);
+    }
+    assert.ok(html.includes('Move to Paris'), 'a project that was let go is still in the page');
+    // Ticked and unticked steps are told apart without any styling to rely on.
+    assert.ok(html.includes('☑ Choose a colour'));
+    assert.ok(html.includes('☐ Buy the paint'));
+    // Still no script and nothing to fetch.
+    assert.ok(!/<script/i.test(html));
+
+    assert.ok(files.get('README.txt')!.toString('utf8').includes('4 projects'));
+  });
+
   it('exports one couple and never another', async () => {
     const owner = await signup('Owner');
     await call(owner, 'POST', '/api/couples', { title: 'Theirs' });

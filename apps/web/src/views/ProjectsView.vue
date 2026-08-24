@@ -122,12 +122,28 @@ async function move(project: Project, status: ProjectStatus): Promise<void> {
  * that happened to the two of them belongs on the timeline. Offering "or not" would be offering to
  * record a milestone nowhere.
  */
-async function finish(project: Project, eventDate: string): Promise<void> {
+async function finish(project: Project, { eventDate, files }: { eventDate: string; files: File[] }): Promise<void> {
   try {
-    await projects.complete(project.id, { eventDate });
-    // The story has a new row, and the timeline screen must not still be showing the old one.
+    const done = await projects.complete(project.id, { eventDate });
+    /*
+     * Photos go on afterwards, through the ordinary endpoint: the memory has to exist before
+     * anything can be attached to it. A failure here must not undo the finish — the project is done
+     * either way, and the photos can be added to the memory later.
+     */
+    if (files.length && done.eventId) {
+      try {
+        await timeline.addPhotos(done.eventId, files);
+      } catch {
+        toasts.error('Done, but the photos did not upload');
+        await timeline.refresh();
+        return;
+      }
+    }
     await timeline.refresh();
-    toasts.push('Done — and it is on your timeline', 'warm');
+    toasts.push(
+      files.length ? 'Done — on your timeline, with the photos' : 'Done — and it is on your timeline',
+      'warm',
+    );
   } catch {
     toasts.error('Could not finish that');
   }

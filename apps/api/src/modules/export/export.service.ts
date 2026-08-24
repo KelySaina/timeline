@@ -70,6 +70,21 @@ type PhotoRow = {
 
 type RecurringRow = { title: string; month: number; day: number; kind: string; remind_days_before: number };
 
+type ProjectRow = {
+  id: string;
+  type: string;
+  title: string;
+  notes: string | null;
+  status: string;
+  target_year: number | null;
+  author: string;
+  /** As text, and only the day: pg returns a timestamptz as a Date, which has no .slice(). */
+  closed_on: string | null;
+  event_id: string | null;
+  steps: { title: string; done: boolean }[] | null;
+  created_at: string;
+};
+
 /** Safe inside a filename on every platform, and still recognisable. */
 function slug(value: string): string {
   const folded = value
@@ -94,6 +109,7 @@ function renderHtml(
   members: MemberRow[],
   events: EventRow[],
   photosByEvent: Map<string, { name: string; width: number; height: number }[]>,
+  projects: ProjectRow[],
   exportedAt: string,
 ): string {
   const names = members.map((m) => m.display_name);
@@ -137,6 +153,47 @@ function renderHtml(
     })
     .join('\n');
 
+  /*
+   * The projects, after the story. Grouped the way the app groups them, and the ones let go are
+   * kept: what they decided against is part of what they wanted.
+   */
+  const PROJECT_GROUPS: [string, string][] = [
+    ['doing', 'Underway'],
+    ['idea', 'Someday'],
+    ['done', 'Done'],
+    ['cancelled', 'Let go'],
+  ];
+
+  const projectSections = PROJECT_GROUPS.map(([status, heading]) => {
+    const group = projects.filter((project) => project.status === status);
+    if (group.length === 0) return '';
+    const items = group
+      .map((project) => {
+        const steps = (project.steps ?? [])
+          .map((step) => `<li>${step.done ? '☑' : '☐'} ${escapeHtml(step.title)}</li>`)
+          .join('\n          ');
+        const meta = [
+          escapeHtml(project.type),
+          project.target_year ? `hoping for ${project.target_year}` : null,
+          `${escapeHtml(project.author)}'s idea`,
+          project.closed_on ? `closed ${escapeHtml(project.closed_on)}` : null,
+          project.event_id ? 'on the timeline' : null,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        return `      <article>
+        <h3>${escapeHtml(project.title)}</h3>
+        <p class="meta">${meta}</p>
+        ${project.notes ? `<p>${escapeHtml(project.notes).replace(/\n/g, '<br>')}</p>` : ''}
+        ${steps ? `<ul class="steps">\n          ${steps}\n        </ul>` : ''}
+      </article>`;
+      })
+      .join('\n');
+    return `    <section>\n      <h2>${heading}</h2>\n${items}\n    </section>`;
+  })
+    .filter(Boolean)
+    .join('\n');
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -162,10 +219,13 @@ function renderHtml(
   .tags { font-size: .8rem; color: #6f6560; font-family: system-ui, sans-serif; }
   .photos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: .5rem; margin: .75rem 0; }
   .photos img { width: 100%; height: auto; border-radius: 4px; display: block; }
+  .steps { list-style: none; padding: 0; margin: .5rem 0 0; font-size: .9rem; }
+  .steps li { margin: .15rem 0; }
+  .divider { margin: 4rem 0 0; border: 0; border-top: 1px solid #d9d2cc; }
   footer { margin-top: 4rem; border-top: 1px solid #d9d2cc; padding-top: 1rem; font-size: .8rem; color: #6f6560; font-family: system-ui, sans-serif; }
   @media (prefers-color-scheme: dark) {
     body { background: #16130f; color: #ece5dd; }
-    header, footer { border-color: #3a332c; }
+    header, footer, .divider { border-color: #3a332c; }
     h2 { border-color: #2e2822; }
     .meta, .tags, footer { color: #a89c92; }
   }
@@ -178,6 +238,7 @@ function renderHtml(
   <p class="meta">${escapeHtml(names.join(' and '))}${couple.started_on ? ` · since ${escapeHtml(couple.started_on)}` : ''} · ${events.length} ${events.length === 1 ? 'memory' : 'memories'}</p>
 </header>
 ${sections || '    <p>No memories yet.</p>'}
+${projectSections ? `<hr class="divider">\n  <h1>Things we meant to do</h1>\n${projectSections}` : ''}
 <footer>
   Exported ${escapeHtml(exportedAt)} from Timeline. The photos sit beside this file, and
   <code>timeline.json</code> holds the same story as data.
@@ -187,12 +248,12 @@ ${sections || '    <p>No memories yet.</p>'}
 `;
 }
 
-const README = (heading: string, exportedAt: string, events: number, photos: number): string =>
+const README = (heading: string, exportedAt: string, events: number, photos: number, projects: number): string =>
   `${heading}
 ${'='.repeat(heading.length)}
 
 Exported ${exportedAt}
-${events} ${events === 1 ? 'memory' : 'memories'}, ${photos} ${photos === 1 ? 'photo' : 'photos'}
+${events} ${events === 1 ? 'memory' : 'memories'}, ${photos} ${photos === 1 ? 'photo' : 'photos'}, ${projects} ${projects === 1 ? 'project' : 'projects'}
 
   timeline.html   the whole story as one page. Open it in any browser — no server,
                   no internet, no JavaScript. This is the copy meant for reading.
@@ -210,7 +271,7 @@ Nothing here needs Timeline to be running, or to exist.
  * this stays testable without a socket.
  */
 export async function buildExport(coupleId: string): Promise<{ stream: Readable; filename: string }> {
-  const [couples, members, events, photos, recurring] = await Promise.all([
+  const [couples, members, events, photos, recurring, projects] = await Promise.all([
     query<CoupleRow>(
       'select id, title, started_on::text, theme, story_layout, created_at from couples where id = $1',
       [coupleId],
@@ -240,6 +301,21 @@ export async function buildExport(coupleId: string): Promise<{ stream: Readable;
     query<RecurringRow>(
       `select title, month, day, kind, remind_days_before from recurring_events
         where couple_id = $1 order by month, day`,
+      [coupleId],
+    ),
+    query<ProjectRow>(
+      `select p.id, p.type, p.title, p.notes, p.status, p.target_year, p.event_id,
+              p.completed_at::date::text as closed_on,
+              p.created_at, u.display_name as author,
+              coalesce((
+                select json_agg(json_build_object('title', s.title, 'done', s.done_at is not null)
+                                order by s.position, s.created_at)
+                  from project_steps s where s.project_id = p.id
+              ), '[]'::json) as steps
+         from projects p join users u on u.id = p.created_by
+        where p.couple_id = $1
+        order by case p.status when 'doing' then 0 when 'idea' then 1 when 'done' then 2 else 3 end,
+                 p.target_year nulls last, p.created_at`,
       [coupleId],
     ),
   ]);
@@ -279,9 +355,9 @@ export async function buildExport(coupleId: string): Promise<{ stream: Readable;
     ]);
   }
 
-  zip.addBuffer(Buffer.from(README(heading, exportedOn, events.length, entries.length), 'utf8'), 'README.txt');
+  zip.addBuffer(Buffer.from(README(heading, exportedOn, events.length, entries.length, projects.length), 'utf8'), 'README.txt');
   zip.addBuffer(
-    Buffer.from(renderHtml(couple, members, events, photosByEvent, exportedOn), 'utf8'),
+    Buffer.from(renderHtml(couple, members, events, photosByEvent, projects, exportedOn), 'utf8'),
     'timeline.html',
   );
   zip.addBuffer(
@@ -310,6 +386,24 @@ export async function buildExport(coupleId: string): Promise<{ stream: Readable;
             month: r.month,
             day: r.day,
             remindDaysBefore: r.remind_days_before,
+          })),
+          /*
+           * The wants, including the ones let go. An archive that keeps only what was achieved is
+           * not a record of what the two of them wanted, and that is half of what a diary is for.
+           */
+          projects: projects.map((project) => ({
+            type: project.type,
+            title: project.title,
+            notes: project.notes,
+            status: project.status,
+            targetYear: project.target_year,
+            author: project.author,
+            steps: project.steps ?? [],
+            closedAt: project.closed_on,
+            // Named rather than an id: the archive has no database to resolve one against.
+            becameMemory:
+              project.event_id ? (events.find((e) => e.id === project.event_id)?.title ?? null) : null,
+            createdAt: project.created_at,
           })),
           memories: events.map((event) => ({
             type: event.type,

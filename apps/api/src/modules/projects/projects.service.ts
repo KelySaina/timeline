@@ -166,8 +166,13 @@ export async function createProject(
 ): Promise<Project> {
   const id = await transaction(async (client) => {
     const created = await client.query<{ id: string }>(
-      `insert into projects (couple_id, created_by, type, title, notes, status, target_year)
-       values ($1, $2, coalesce($7, 'milestone'), $3, $4, coalesce($5, 'idea'), $6) returning id`,
+      `insert into projects (couple_id, created_by, type, title, notes, status, target_year,
+                             completed_at)
+       values ($1, $2, coalesce($7, 'milestone'), $3, $4, coalesce($5, 'idea'), $6,
+               -- Written down already closed — a want they had and settled before the list existed.
+               -- Closed always means a closing date, however the row got there, or the record has a
+               -- state with no moment attached to it.
+               case when $5 in ('done', 'cancelled') then now() end) returning id`,
       [
         coupleId,
         userId,

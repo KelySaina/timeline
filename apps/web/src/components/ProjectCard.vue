@@ -15,7 +15,7 @@ const emit = defineEmits<{
   tick: [{ stepId: string; done: boolean }];
   edit: [];
   move: [ProjectStatus];
-  finish: [string];
+  finish: [{ eventDate: string; files: File[] }];
   postpone: [];
   openMemory: [];
   remove: [];
@@ -25,6 +25,18 @@ const menu = ref(false);
 const confirmingFinish = ref(false);
 /** Defaults to today, because most things are marked done the day they happen. */
 const finishedOn = ref(new Date().toISOString().slice(0, 10));
+/**
+ * Photos of the thing, offered here rather than only on the memory afterwards. This is the moment
+ * someone has them — they just did the thing — and sending them to "open the memory and edit it"
+ * costs the moment.
+ */
+const files = ref<File[]>([]);
+
+function pickFiles(event: Event): void {
+  const picked = [...((event.target as HTMLInputElement).files ?? [])];
+  // Ten per memory, the same cap the composer enforces and the API checks.
+  files.value = [...files.value, ...picked.slice(0, 10 - files.value.length)];
+}
 
 /** The same icon and colour the memory will carry, so the two screens agree about what this is. */
 const meta = computed(() => typeMeta(props.project.type));
@@ -194,17 +206,28 @@ const closedOn = computed(() =>
         <label class="block text-[0.8125rem] text-ink-soft" :for="`finished-${project.id}`">
           When? It joins your timeline as a memory.
         </label>
-        <div class="flex flex-wrap items-center justify-end gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <input
             :id="`finished-${project.id}`"
             v-model="finishedOn"
             type="date"
             class="field !h-8 !w-auto flex-1 !py-0 !text-[0.8125rem] tabular-nums"
           />
-          <button class="chip" @click="confirmingFinish = false">Cancel</button>
+          <label
+            v-if="files.length < 10"
+            class="chip cursor-pointer"
+            :title="`Photos for ${project.title}`"
+          >
+            <FaIcon icon="camera" class="text-[0.6rem]" />
+            {{ files.length ? `${files.length} photo${files.length === 1 ? '' : 's'}` : 'Photos' }}
+            <input type="file" accept="image/*" multiple class="hidden" @change="pickFiles" />
+          </label>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2">
+          <button class="chip" @click="confirmingFinish = false; files = []">Cancel</button>
           <button
             class="chip !border-[var(--ember)] !text-[var(--ember)]"
-            @click="emit('finish', finishedOn); confirmingFinish = false"
+            @click="emit('finish', { eventDate: finishedOn, files }); confirmingFinish = false; files = []"
           >
             <FaIcon icon="heart" class="text-[0.6rem]" />Add it
           </button>

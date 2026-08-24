@@ -387,8 +387,12 @@ key it was created with — so `setup.sh --rotate` deliberately leaves these alo
 
 - **timeline.html** — the whole story as a single page: no server, no JavaScript, no network, photos
   beside it. This is the copy meant for reading, and the reason the feature exists: a private
-  archive of irreplaceable things must not be hostage to the software holding it.
-- **timeline.json** — the same story as data, for moving it somewhere else.
+  archive of irreplaceable things must not be hostage to the software holding it. The projects follow the
+  story under their own heading, with their checklists as ☑ and ☐ so ticks survive with no styling to
+  depend on.
+- **timeline.json** — the same story as data, for moving it somewhere else. Projects travel with it,
+  the ones let go included: an archive that keeps only what was achieved is not a record of what the
+  two of them wanted.
 - **photos/** — every photo at full size, named `date-title-n.webp` so the folder sorts
   chronologically and each file makes sense alone.
 

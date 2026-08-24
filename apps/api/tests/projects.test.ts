@@ -232,6 +232,20 @@ describe('projects', () => {
     assert.equal(event.body.event.type, 'trip');
   });
 
+  it('stamps a closing date even when it is written down already closed', async () => {
+    const user = await signup('Retrospective');
+    await call(user, 'POST', '/api/couples', {});
+
+    // A want they had and settled before this list existed. Closed always means a closing date,
+    // however the row got there.
+    const gone = await call(user, 'POST', '/api/projects', { title: 'Move to Paris', status: 'cancelled' });
+    assert.equal(gone.status, 201);
+    assert.ok(gone.body.project.completedAt);
+
+    const open = await call(user, 'POST', '/api/projects', { title: 'Still wanted' });
+    assert.equal(open.body.project.completedAt, null, 'and an open one has none');
+  });
+
   it('lets a project be let go, and wanted again', async () => {
     const user = await signup('Realist');
     await call(user, 'POST', '/api/couples', {});
