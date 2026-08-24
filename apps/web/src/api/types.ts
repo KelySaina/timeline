@@ -55,6 +55,8 @@ export type TimelineEvent = {
   datePrecision: DatePrecision;
   location: string | null;
   mood: Mood | null;
+  /** Days of warning before a future memory, or null for none. */
+  remindDaysBefore: number | null;
   tags: string[];
   photos: EventPhoto[];
   author: { id: string; displayName: string };
@@ -71,6 +73,7 @@ export type EventDraft = {
   datePrecision?: DatePrecision;
   location?: string | null;
   mood?: Mood | null;
+  remindDaysBefore?: number | null;
   tags?: string[];
 };
 

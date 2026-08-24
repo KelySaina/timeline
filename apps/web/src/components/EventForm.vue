@@ -31,6 +31,14 @@ const endDate = ref<string>('');
 const precision = ref<DatePrecision>('day');
 const location = ref('');
 const mood = ref<string | null>(null);
+/**
+ * Days of warning, or null for none. Only offered on a future date: a memory in the past has nothing
+ * to warn about, and arming one there would be a notification that never comes.
+ */
+const remindDaysBefore = ref<number | null>(null);
+const LEAD_TIMES = [0, 1, 3, 7, 14, 30] as const;
+const leadLabel = (days: number): string =>
+  days === 0 ? 'On the day' : days === 1 ? 'A day before' : `${days} days before`;
 const tags = ref<string[]>([]);
 const files = ref<File[]>([]);
 const previews = ref<string[]>([]);
@@ -78,6 +86,7 @@ function reset(): void {
   precision.value = source?.datePrecision ?? 'day';
   location.value = source?.location ?? '';
   mood.value = source?.mood ?? null;
+  remindDaysBefore.value = source?.remindDaysBefore ?? null;
   tags.value = [...(source?.tags ?? [])];
   files.value = [];
   previews.value.forEach(URL.revokeObjectURL);
@@ -126,6 +135,9 @@ async function save(): Promise<void> {
       endDate: endDate.value || null,
       location: location.value.trim() || null,
       mood: (mood.value as EventDraft['mood']) ?? null,
+      // Cleared when the date is no longer in the future, so correcting a date backwards does not
+      // leave a reminder armed on a memory that has already happened.
+      remindDaysBefore: isFuture.value ? remindDaysBefore.value : null,
       tags: tags.value,
     };
 
@@ -232,6 +244,25 @@ async function save(): Promise<void> {
         <p v-if="errors.title" class="mt-1.5 text-[0.8125rem] text-[var(--ember)]">{{ errors.title }}</p>
       </div>
 
+      <!--
+        Only for a future date, and shown with the date rather than behind the "optional" fold: this
+        is the moment the date was typed, and the answer is obvious now and forgotten later.
+      -->
+      <div v-if="isFuture">
+        <label class="label" for="memory-remind">Remind us</label>
+        <div class="flex flex-wrap items-center gap-2">
+          <FaIcon icon="bell" class="shrink-0 text-[0.7rem] text-muted" />
+          <select id="memory-remind" v-model="remindDaysBefore" class="field !h-9 !w-auto !py-0 !text-[0.8125rem]">
+            <option :value="null">Not at all</option>
+            <option v-for="days in LEAD_TIMES" :key="days" :value="days">{{ leadLabel(days) }}</option>
+          </select>
+        </div>
+        <p class="mt-1.5 text-[0.7rem] text-muted">
+          Nine in the morning, wherever you are — if notifications are on under
+          <RouterLink :to="{ name: 'upcoming' }" class="underline">Soon</RouterLink>.
+        </p>
+      </div>
+
       <!-- Everything below is optional and one tap away. -->
       <button
         v-if="!expanded"
@@ -313,6 +344,7 @@ async function save(): Promise<void> {
         </div>
       </div>
     </div>
+
 
     <template #footer>
       <div class="flex items-center justify-end gap-3">

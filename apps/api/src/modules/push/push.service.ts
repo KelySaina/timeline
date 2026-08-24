@@ -157,6 +157,103 @@ export async function countSubscriptions(userId: string): Promise<number> {
   return Number(row?.count ?? 0);
 }
 
+/**
+ * A name for a subscription, from the user agent it was created with.
+ *
+ * Read for *display only*, and only ever coarsely: the point is to tell two of your own devices
+ * apart in a list well enough to know which one to switch off. Nothing branches on it, so being
+ * wrong costs a confusing label and never behaviour — which is why the matching can stay this
+ * crude, and why a phone the list calls "Android · Chrome" is fine even if it is a tablet.
+ */
+export function describeDevice(userAgent: string | null): string {
+  if (!userAgent) return 'Unknown device';
+  const ua = userAgent;
+
+  const platform = /iPhone/.test(ua)
+    ? 'iPhone'
+    : /iPad/.test(ua)
+      ? 'iPad'
+      : /Android/.test(ua)
+        ? 'Android'
+        : /Macintosh|Mac OS X/.test(ua)
+          ? 'Mac'
+          : /Windows/.test(ua)
+            ? 'Windows'
+            : /Linux|X11/.test(ua)
+              ? 'Linux'
+              : 'Device';
+
+  // Order matters: every one of these also says "Safari" or "Chrome" somewhere in its UA.
+  const browser = /Edg\//.test(ua)
+    ? 'Edge'
+    : /OPR\/|Opera/.test(ua)
+      ? 'Opera'
+      : /SamsungBrowser/.test(ua)
+        ? 'Samsung Internet'
+        : /Firefox|FxiOS/.test(ua)
+          ? 'Firefox'
+          : /CriOS/.test(ua)
+            ? 'Chrome'
+            : /Chrome|Chromium/.test(ua)
+              ? 'Chrome'
+              : /Safari/.test(ua)
+                ? 'Safari'
+                : null;
+
+  return browser ? `${platform} · ${browser}` : platform;
+}
+
+export type Device = {
+  id: string;
+  label: string;
+  createdAt: string;
+  lastSentAt: string | null;
+  /** True for the browser doing the asking, so the list can say "this device". */
+  current: boolean;
+};
+
+/**
+ * Every device this person's notifications go to.
+ *
+ * The endpoint is never returned. It is the address a push service accepts sends at, and there is
+ * no reason for it to travel back out to a page — the id is enough to name a row for removal.
+ */
+export async function listDevices(userId: string, currentEndpoint?: string): Promise<Device[]> {
+  const rows = await query<{
+    id: string;
+    user_agent: string | null;
+    created_at: string;
+    last_sent_at: string | null;
+    endpoint: string;
+  }>(
+    `select id, user_agent, created_at, last_sent_at, endpoint
+       from push_subscriptions where user_id = $1 order by created_at`,
+    [userId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    label: describeDevice(row.user_agent),
+    createdAt: row.created_at,
+    lastSentAt: row.last_sent_at,
+    current: currentEndpoint !== undefined && row.endpoint === currentEndpoint,
+  }));
+}
+
+/**
+ * Switch one device off from any other one — the point of the whole list. Scoped to the user, so an
+ * id is not a capability: guessing one belonging to someone else removes nothing.
+ *
+ * Returns whether a row was actually removed, so the caller can 404 rather than silently succeed on
+ * an id that was never theirs.
+ */
+export async function removeDevice(userId: string, id: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    'delete from push_subscriptions where user_id = $1 and id = $2 returning id',
+    [userId, id],
+  );
+  return rows.length > 0;
+}
+
 /** True when this exact browser is already subscribed — what the toggle in the UI reflects. */
 export async function hasSubscription(userId: string, endpoint: string): Promise<boolean> {
   const row = await queryOne<{ id: string }>(

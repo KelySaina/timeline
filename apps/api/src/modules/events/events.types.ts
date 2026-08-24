@@ -38,6 +38,8 @@ export type TimelineEvent = {
   datePrecision: DatePrecision;
   location: string | null;
   mood: Mood | null;
+  /** Days of warning before a plan, or null for none. Never fires on a past date. */
+  remindDaysBefore: number | null;
   tags: string[];
   photos: EventPhoto[];
   author: { id: string; displayName: string };

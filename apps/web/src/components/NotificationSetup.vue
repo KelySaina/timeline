@@ -7,11 +7,14 @@
  * Settings can change that" sends the reader off to poke at a switch that will never work. So the
  * copy names the actual obstacle, and only offers a control where there is something a tap can do.
  */
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import {
   devices,
+  devicesList,
   disable,
   enable,
+  forgetDevice,
+  loadDevices,
   prefs,
   ready,
   refresh,
@@ -21,6 +24,7 @@ import {
   state,
   working,
 } from '@/lib/notifications';
+import type { Device } from '@/lib/notifications';
 import type { NotificationPrefs } from '@/lib/notifications';
 import { canOfferInstall } from '@/lib/pwa';
 import { useToastStore } from '@/stores/toast';
@@ -72,6 +76,43 @@ async function toggle(key: keyof NotificationPrefs, value: boolean): Promise<voi
   } catch {
     toasts.error('Could not save that');
   }
+}
+
+const showDevices = ref(false);
+
+/**
+ * The list is loaded when it is opened, not on every visit to the screen. It only matters when
+ * someone is looking for a device to switch off.
+ */
+async function openDevices(): Promise<void> {
+  showDevices.value = !showDevices.value;
+  if (showDevices.value) {
+    try {
+      await loadDevices();
+    } catch {
+      toasts.error('Could not load your devices');
+      showDevices.value = false;
+    }
+  }
+}
+
+async function forget(device: Device): Promise<void> {
+  try {
+    await forgetDevice(device);
+    toasts.push(device.current ? 'Notifications off for this device' : `${device.label} will not be notified`);
+  } catch {
+    toasts.error('Could not switch that off');
+  }
+}
+
+/** "today", "3 days ago", "12 Mar" — enough to recognise a device by, no more. */
+function when(iso: string | null): string {
+  if (!iso) return 'never';
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days} days ago`;
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 async function test(): Promise<void> {
@@ -163,6 +204,55 @@ async function test(): Promise<void> {
             />
           </li>
         </ul>
+
+        <!--
+          Shown whenever there is a device to manage, and NOT gated on this browser being subscribed:
+          the case the list exists for is a phone you are not holding, so the browser most likely to
+          need it is one that cannot receive notifications itself. Hidden only when the single device
+          is the one you are on, where the switch above already covers it.
+        -->
+        <div v-if="devices > 0 && !(devices === 1 && state === 'on')" class="mt-3">
+          <button
+            class="inline-flex items-center gap-1.5 text-[0.75rem] text-muted underline decoration-dotted"
+            :aria-expanded="showDevices"
+            @click="openDevices"
+          >
+            <FaIcon :icon="showDevices ? 'chevron-right' : 'mobile-screen-button'" class="text-[0.6rem]" />
+            {{
+              showDevices
+                ? 'Hide devices'
+                : devices === 1
+                  ? '1 device is getting these'
+                  : `${devices} devices are getting these`
+            }}
+          </button>
+
+          <ul v-if="showDevices" class="mt-2.5 space-y-1.5">
+            <li
+              v-for="device in devicesList"
+              :key="device.id"
+              class="card-quiet flex items-center gap-2.5 px-3 py-2"
+            >
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-[0.8125rem] text-ink">
+                  {{ device.label }}
+                  <span v-if="device.current" class="text-[0.7rem] text-[var(--ember)]">· this one</span>
+                </span>
+                <span class="block text-[0.7rem] text-muted">
+                  Last notified {{ when(device.lastSentAt) }}
+                </span>
+              </span>
+              <button
+                class="btn btn-quiet h-7 shrink-0 rounded-full px-2.5 text-[0.7rem]"
+                :disabled="working"
+                :aria-label="`Stop notifying ${device.label}`"
+                @click="forget(device)"
+              >
+                Switch off
+              </button>
+            </li>
+          </ul>
+        </div>
 
         <div v-if="state === 'on' || state === 'off'" class="mt-3 flex flex-wrap items-center gap-2">
           <AppButton v-if="state === 'off'" variant="primary" :loading="working" @click="turnOn">

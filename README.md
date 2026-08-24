@@ -308,6 +308,10 @@ sent nothing. It sends now.
   the recipient's own date from an IANA zone stored per user — partners travel apart. The browser
   reports the zone when notifications are switched on; nobody is asked to pick one from a list.
 - **Nobody is reminded of their own birthday.** Their partner is.
+- **One-off plans get reminders too.** A trip, a dinner, a promise with a date on it carries its own
+  lead time, set where the date was typed. Null means none, because most memories are in the past and
+  defaulting would arm a reminder on every one of them; a lead time on a past date is accepted and
+  simply never fires, so correcting a date backwards does not need it cleared by hand.
 - **Every replica can run the scheduler.** There is no leader election and no lock: each send is
   claimed by an `insert into notification_sends` before it is attempted, so a second replica — or a
   redeploy mid-tick — loses on the primary key and sends nothing. The key names the *occurrence*, so
@@ -317,6 +321,10 @@ sent nothing. It sends now.
   the frequent one is what gets permission revoked for the other two), and *on this day* (only on a
   date that already holds a memory). Kept on the person, not the device, so a second phone inherits
   the choice.
+- **A device list, so a lost phone can be silenced from a laptop.** Labelled coarsely from the user
+  agent ("iPhone · Safari") — enough to tell your own two devices apart, and nothing branches on it.
+  Shown even when the browser you are on cannot receive notifications itself, because that is
+  precisely the case it exists for. The push endpoint never travels back out to the page.
 - **Per browser, not per account.** The switch reflects the device you are looking at, and each one
   is turned on separately. A dead endpoint (404/410 from the push service) is deleted on the spot,
   and one that keeps failing for any other reason is dropped after twelve consecutive attempts.
@@ -388,6 +396,5 @@ cheaper assertion. That was a real bug, caught exactly that way.
 
 ## Not built yet (by design)
 
-AI recaps, bucket lists, print, video and voice memories, sharing, a list of the devices
-notifications go to, and reminders for one-off plans rather than yearly dates.
+AI recaps, bucket lists, print, video and voice memories, sharing.
 `docs/DESIGN.md` §8 records where each one attaches.

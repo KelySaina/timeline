@@ -51,8 +51,9 @@ export async function listUpcoming(coupleId: string, horizonDays = 365): Promise
       type: EventType;
       location: string | null;
       photo_count: string;
+      remind_days_before: number | null;
     }>(
-      `select e.id, e.title, e.event_date, e.type, e.location,
+      `select e.id, e.title, e.event_date, e.type, e.location, e.remind_days_before,
               (select count(*) from event_photos p where p.event_id = e.id) as photo_count
          from events e
         where e.couple_id = $1 and e.deleted_at is null
@@ -98,7 +99,8 @@ export async function listUpcoming(coupleId: string, horizonDays = 365): Promise
       eventType: plan.type,
       location: plan.location,
       photoCount: Number(plan.photo_count),
-      remindDaysBefore: null,
+      // A plan can now carry its own lead time, so Upcoming shows the real one rather than null.
+      remindDaysBefore: plan.remind_days_before,
     });
   }
 

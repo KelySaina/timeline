@@ -149,6 +149,58 @@ export async function runReminderTick(deliver: Deliver = sendToUser): Promise<nu
 }
 
 /* ---------------------------------------------------------------------------------------------
+ * One-off plans
+ * ------------------------------------------------------------------------------------------ */
+
+type Plan = { id: string; title: string; event_date: string; remind_days_before: number };
+
+/**
+ * A plan on the timeline with a lead time of its own — a trip, a dinner, a promise with a date.
+ *
+ * Shares the recurring tick's hour and its claim mechanism, and differs in one way that matters:
+ * a plan happens once, so the comparison is against a real date rather than a computed occurrence,
+ * and the SQL can do the whole thing. `event_date - local_date = lead` is the same sentence as the
+ * recurring version, only without the "which year" question.
+ */
+export async function runPlanReminderTick(deliver: Deliver = sendToUser): Promise<number> {
+  const people = await candidates('notify_reminders');
+  if (people.length === 0) return 0;
+
+  let sent = 0;
+
+  for (const person of people) {
+    const rows = await query<Plan>(
+      `select id, title, event_date::text as event_date, remind_days_before
+         from events
+        where couple_id = $1
+          and deleted_at is null
+          and remind_days_before is not null
+          -- Counted in the reader's own date, like everything else here.
+          and event_date - $2::date = remind_days_before
+        order by event_date, created_at`,
+      [person.couple_id, person.local_date],
+    );
+
+    for (const row of rows) {
+      const key = `event:${row.id}:${row.event_date}`;
+      if (!(await claim(person.user_id, key))) continue;
+
+      const delivered = await deliver(person.user_id, {
+        title: `${row.title} ${when(row.remind_days_before)}`,
+        body: 'A plan on your timeline.',
+        url: `/memory/${row.id}`,
+        tag: key,
+      });
+
+      if (delivered === 0) await releaseClaim(person.user_id, key);
+      else sent += 1;
+    }
+  }
+
+  return sent;
+}
+
+/* ---------------------------------------------------------------------------------------------
  * On this day
  * ------------------------------------------------------------------------------------------ */
 
@@ -217,6 +269,7 @@ export function startReminders(): void {
   if (!pushConfigured || timer) return;
   timer = setInterval(() => {
     void runReminderTick().catch((error) => console.error('[reminders] tick failed', error));
+    void runPlanReminderTick().catch((error) => console.error('[plans] tick failed', error));
     void runOnThisDayTick().catch((error) => console.error('[on-this-day] tick failed', error));
   }, TICK_MS);
   // Never hold the process open: a tick pending at shutdown is a tick worth losing.

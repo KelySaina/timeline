@@ -28,7 +28,8 @@ const { createApp } = await import('../src/app.js');
 const { pool, query, queryOne } = await import('../src/db/pool.js');
 const { migrate } = await import('../src/db/migrate.js');
 const { ensureDatabase } = await import('./support/database.js');
-const { runReminderTick, runOnThisDayTick, SEND_HOUR } = await import('../src/modules/push/reminders.js');
+const { runReminderTick, runPlanReminderTick, runOnThisDayTick, SEND_HOUR } =
+  await import('../src/modules/push/reminders.js');
 const { handleChangeForTests } = await import('../src/modules/push/activity.js');
 
 let server: Server;
@@ -229,6 +230,59 @@ describe('push subscriptions', () => {
     assert.equal(gone.body.devices, 0);
   });
 
+  it('lists the devices notifications go to, and lets any of them switch another off', async () => {
+    const { session } = await signup('Traveller');
+    const phone = { ...subscription(), userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1' };
+    const laptop = { ...subscription(), userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36' };
+    await call(session, 'POST', '/api/push/subscribe', phone);
+    await call(session, 'POST', '/api/push/subscribe', laptop);
+
+    // Asked from the laptop, so it is the one marked "this one".
+    const listed = await call(session, 'GET', `/api/push/devices?endpoint=${encodeURIComponent(laptop.endpoint)}`);
+    assert.equal(listed.status, 200);
+    const devices = listed.body.devices as { id: string; label: string; current: boolean }[];
+    assert.equal(devices.length, 2);
+    assert.deepEqual(devices.map((d) => d.label).sort(), ['Linux · Chrome', 'iPhone · Safari']);
+    assert.deepEqual(
+      devices.filter((d) => d.current).map((d) => d.label),
+      ['Linux · Chrome'],
+      'only the browser doing the asking is the current one',
+    );
+
+    // The endpoint never travels back out: it is the address sends are accepted at, and the id is
+    // enough to name a row.
+    assert.equal(JSON.stringify(devices).includes('push.test.local'), false);
+
+    // The whole point: switching off a phone you are not holding.
+    const phoneId = devices.find((d) => d.label === 'iPhone · Safari')!.id;
+    const removed = await call(session, 'DELETE', `/api/push/devices/${phoneId}`);
+    assert.equal(removed.status, 200);
+    assert.deepEqual((removed.body.devices as { label: string }[]).map((d) => d.label), ['Linux · Chrome']);
+    // And it really is gone, not merely absent from that one response.
+    const laptopState = await call(session, 'GET', `/api/push/state?endpoint=${encodeURIComponent(phone.endpoint)}`);
+    assert.equal(laptopState.body.subscribed, false);
+    assert.equal(laptopState.body.devices, 1);
+  });
+
+  it('cannot switch off a device belonging to someone else', async () => {
+    const owner = await signup('DeviceOwner');
+    const stranger = await signup('DeviceStranger');
+    await call(owner.session, 'POST', '/api/push/subscribe', subscription());
+    const mine = (await call(owner.session, 'GET', '/api/push/devices')).body.devices[0];
+
+    // An id is not a capability. A stranger holding a real one removes nothing, and is told so
+    // rather than being allowed to believe it worked.
+    const attempt = await call(stranger.session, 'DELETE', `/api/push/devices/${mine.id}`);
+    assert.equal(attempt.status, 404);
+    assert.equal((await call(owner.session, 'GET', '/api/push/devices')).body.devices.length, 1);
+
+    // A well-formed id that exists nowhere is the same answer.
+    assert.equal(
+      (await call(owner.session, 'DELETE', `/api/push/devices/${randomUUID()}`)).status,
+      404,
+    );
+  });
+
   it('needs a session', async () => {
     const anonymous = await fetch(`${base}/api/push/state`);
     assert.equal(anonymous.status, 401);
@@ -365,6 +419,111 @@ describe('reminder scheduler', () => {
 
     const run = recorder();
     await runReminderTick(run.deliver);
+    assert.equal(run.sent.filter((s) => s.userId === id).length, 0);
+  });
+});
+
+describe('plan reminders', () => {
+  const recorder = () => {
+    const sent: { userId: string; title: string; url: string }[] = [];
+    const deliver = async (userId: string, payload: { title: string; body: string; url: string; tag: string }) => {
+      sent.push({ userId, title: payload.title, url: payload.url });
+      return 1;
+    };
+    return { sent, deliver };
+  };
+
+  it('warns about a one-off plan its own number of days ahead', async () => {
+    const zone = await zoneAtSendHour();
+    const { session, id } = await signup('Planner');
+    await call(session, 'POST', '/api/couples', {});
+    await call(session, 'POST', '/api/push/subscribe', { ...subscription(), timezone: zone.name });
+
+    // Three days out with three days of warning, and the same plan with none.
+    const due = await call(session, 'POST', '/api/events', {
+      type: 'celebration', title: 'Anniversary dinner', eventDate: plusDays(zone.localDate, 3), remindDaysBefore: 3,
+    });
+    assert.equal(due.status, 201);
+    assert.equal(due.body.event.remindDaysBefore, 3, 'the lead time comes back on the event');
+
+    const silent = await call(session, 'POST', '/api/events', {
+      type: 'trip', title: 'Unannounced trip', eventDate: plusDays(zone.localDate, 3),
+    });
+    assert.equal(silent.body.event.remindDaysBefore, null, 'no reminder unless one was asked for');
+
+    // Right number of days, wrong lead time: 10 days out with 3 days of warning says nothing today.
+    await call(session, 'POST', '/api/events', {
+      type: 'trip', title: 'Later trip', eventDate: plusDays(zone.localDate, 10), remindDaysBefore: 3,
+    });
+
+    const run = recorder();
+    await runPlanReminderTick(run.deliver);
+    const mine = run.sent.filter((s) => s.userId === id);
+    assert.deepEqual(mine.map((s) => s.title), ['Anniversary dinner is in 3 days']);
+    assert.equal(mine[0]!.url, `/memory/${due.body.event.id}`, 'a tap goes to the plan itself');
+
+    // Claimed for that occurrence, so the other ticks in the hour add nothing.
+    const again = recorder();
+    await runPlanReminderTick(again.deliver);
+    assert.equal(again.sent.filter((s) => s.userId === id).length, 0);
+  });
+
+  it('says nothing about a plan that has passed, or one that was deleted', async () => {
+    const zone = await zoneAtSendHour();
+    const { session, id } = await signup('Hindsight');
+    await call(session, 'POST', '/api/couples', {});
+    await call(session, 'POST', '/api/push/subscribe', { ...subscription(), timezone: zone.name });
+
+    // A lead time on a past date is accepted and never fires — refusing it would mean a memory whose
+    // date is corrected backwards needs its reminder cleared by hand.
+    const past = await call(session, 'POST', '/api/events', {
+      type: 'memory', title: 'Already happened', eventDate: plusDays(zone.localDate, -3), remindDaysBefore: 3,
+    });
+    assert.equal(past.status, 201);
+
+    // Due today, then deleted: a soft-deleted plan is not a plan.
+    const removed = await call(session, 'POST', '/api/events', {
+      type: 'trip', title: 'Called off', eventDate: plusDays(zone.localDate, 2), remindDaysBefore: 2,
+    });
+    assert.equal((await call(session, 'DELETE', `/api/events/${removed.body.event.id}`)).status, 204);
+
+    const run = recorder();
+    await runPlanReminderTick(run.deliver);
+    assert.deepEqual(run.sent.filter((s) => s.userId === id), []);
+  });
+
+  it('is governed by the same switch as the yearly dates', async () => {
+    const zone = await zoneAtSendHour();
+    const { session, id } = await signup('Muted');
+    await call(session, 'POST', '/api/couples', {});
+    await call(session, 'POST', '/api/push/subscribe', { ...subscription(), timezone: zone.name });
+    await call(session, 'POST', '/api/events', {
+      type: 'trip', title: 'Quietly', eventDate: plusDays(zone.localDate, 5), remindDaysBefore: 5,
+    });
+    assert.equal((await call(session, 'PATCH', '/api/push/prefs', { reminders: false })).status, 200);
+
+    const run = recorder();
+    await runPlanReminderTick(run.deliver);
+    assert.equal(run.sent.filter((s) => s.userId === id).length, 0);
+  });
+
+  it('can be cleared again', async () => {
+    const zone = await zoneAtSendHour();
+    const { session, id } = await signup('Recanted');
+    await call(session, 'POST', '/api/couples', {});
+    await call(session, 'POST', '/api/push/subscribe', { ...subscription(), timezone: zone.name });
+    const plan = await call(session, 'POST', '/api/events', {
+      type: 'trip', title: 'Never mind', eventDate: plusDays(zone.localDate, 4), remindDaysBefore: 4,
+    });
+
+    // Explicit null, not an omitted field: the patch has to be able to say "no reminder" as well as
+    // "leave it alone".
+    const cleared = await call(session, 'PATCH', `/api/events/${plan.body.event.id}`, { remindDaysBefore: null });
+    assert.equal(cleared.status, 200);
+    assert.equal(cleared.body.event.remindDaysBefore, null);
+
+    const run = recorder();
+    await runPlanReminderTick(run.deliver);
     assert.equal(run.sent.filter((s) => s.userId === id).length, 0);
   });
 });

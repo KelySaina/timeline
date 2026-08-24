@@ -264,6 +264,9 @@ of root credentials.
 | Export declares no entry sizes | yazl aborts the archive when a stream disagrees with its promised size, so one lost photo would corrupt everything else | A missing file becomes an empty entry |
 | The archive carries a plain HTML page, not just JSON | The point is that the story outlives this app: no server, no script, no network | Print styles are already there |
 | `proxy_hide_header` for the headers helmet also sets | `add_header` appends rather than replaces, so every /api/ response carried two Referrer-Policy values and two conflicting X-Frame-Options | Helmet stays, because in development the API is reached with no proxy |
+| Reminders for plans live on `events.remind_days_before`, nullable | Most memories are in the past; a default would arm a reminder on every one of them | A past date keeps its value and never fires |
+| The device list is not gated on this browser being subscribed | The case it exists for is a phone you are not holding, so the browser needing it most is often one that cannot receive | Hidden only when the one device is this one |
+| Tests get their own database via TEST_DATABASE_URL | A dev API container on the same database acts on changes the tests publish, and wins the claim | CI already had a dedicated one, which is why this was invisible there |
 | Docker Compose (db + api + web) | One command to run the whole stack | Same images deploy to a real host |
 | Live updates over SSE, not WebSocket | Traffic is one-directional, rides the session cookie, needs no upgrade through nginx/Traefik, browser owns the reconnect | Bidirectional features (typing, presence) would need the upgrade |
 | The stream carries a nudge, not content | Every update is re-read through the normal endpoint, so the couple check stays on the read path and a stream cannot leak what an endpoint would refuse | Payloads could carry rows later; the authz cost is the reason not to |

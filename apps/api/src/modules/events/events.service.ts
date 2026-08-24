@@ -15,6 +15,7 @@ type Row = {
   date_precision: DatePrecision;
   location: string | null;
   mood: Mood | null;
+  remind_days_before: number | null;
   created_at: string;
   updated_at: string;
   author_id: string;
@@ -25,7 +26,7 @@ type Row = {
 
 const SELECT = `
   select e.id, e.type, e.title, e.description, e.event_date, e.end_date, e.date_precision,
-         e.location, e.mood, e.created_at, e.updated_at,
+         e.location, e.mood, e.remind_days_before, e.created_at, e.updated_at,
          u.id as author_id, u.display_name as author_name,
          coalesce((
            select json_agg(json_build_object('id', p.id, 'width', p.width, 'height', p.height,
@@ -49,6 +50,7 @@ const toEvent = (row: Row): TimelineEvent => ({
   datePrecision: row.date_precision,
   location: row.location,
   mood: row.mood,
+  remindDaysBefore: row.remind_days_before,
   tags: row.tags ?? [],
   photos: row.photos ?? [],
   author: { id: row.author_id, displayName: row.author_name },
@@ -188,6 +190,7 @@ export type EventInput = {
   datePrecision?: DatePrecision;
   location?: string | null;
   mood?: Mood | null;
+  remindDaysBefore?: number | null;
   tags?: string[];
 };
 
@@ -213,8 +216,8 @@ export async function createEvent(
     const created = await client.query<{ id: string }>(
       `insert into events
          (couple_id, created_by, type, title, description, event_date, end_date,
-          date_precision, location, mood)
-       values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 'day'), $9, $10)
+          date_precision, location, mood, remind_days_before)
+       values ($1, $2, $3, $4, $5, $6, $7, coalesce($8, 'day'), $9, $10, $11)
        returning id`,
       [
         coupleId,
@@ -227,6 +230,7 @@ export async function createEvent(
         input.datePrecision ?? null,
         input.location?.trim() || null,
         input.mood ?? null,
+        input.remindDaysBefore ?? null,
       ],
     );
     const eventId = created.rows[0]!.id;
@@ -253,6 +257,8 @@ export async function updateEvent(
               date_precision = coalesce($10, date_precision),
               location       = case when $11::boolean then $12::text else location end,
               mood           = case when $13::boolean then $14::text else mood end,
+              remind_days_before =
+                case when $15::boolean then $16::integer else remind_days_before end,
               updated_at     = now()
         where id = $2 and couple_id = $1`,
       [
@@ -270,6 +276,8 @@ export async function updateEvent(
         patch.location?.trim() ?? null,
         patch.mood !== undefined,
         patch.mood ?? null,
+        patch.remindDaysBefore !== undefined,
+        patch.remindDaysBefore ?? null,
       ],
     );
     if (patch.tags !== undefined) await replaceTags(client, coupleId, eventId, normalizeTags(patch.tags));

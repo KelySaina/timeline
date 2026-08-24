@@ -39,6 +39,14 @@ const bodySchema = z.object({
   location: z.string().trim().max(160).nullish(),
   mood: z.enum(MOODS).nullish(),
   tags: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
+  /**
+   * Days of warning before this happens, or null for none. Nullable rather than defaulted, because
+   * most memories are in the past: defaulting would arm a reminder on every one of them.
+   *
+   * Accepted on a past date too, and simply never fires — refusing it would mean a memory whose date
+   * is corrected backwards has to have its reminder cleared by hand.
+   */
+  remindDaysBefore: z.coerce.number().int().min(0).max(90).nullish(),
 });
 
 const patchSchema = bodySchema.partial().refine((v) => Object.keys(v).length > 0, 'Nothing to update');

@@ -90,6 +90,49 @@ export const prefs = computed<NotificationPrefs>(
   () => server.value?.prefs ?? { reminders: true, activity: false, onThisDay: false },
 );
 
+/** One of this person's subscribed browsers, as the list shows it. */
+export type Device = {
+  id: string;
+  label: string;
+  createdAt: string;
+  lastSentAt: string | null;
+  current: boolean;
+};
+
+const deviceList = ref<Device[]>([]);
+export const devicesList = computed(() => deviceList.value);
+
+/**
+ * Load the devices notifications go to. Asked for separately rather than folded into the state
+ * call, because the state call runs on every visit to the screen and this list is only looked at
+ * when someone opens it.
+ */
+export async function loadDevices(): Promise<void> {
+  const query = endpoint.value ? `?endpoint=${encodeURIComponent(endpoint.value)}` : '';
+  deviceList.value = (await api.get<{ devices: Device[] }>(`/push/devices${query}`)).devices;
+}
+
+/**
+ * Switch one off. If it is this browser, the local subscription goes too — otherwise the server
+ * would have forgotten it while the browser still held one, and the next visit would silently
+ * re-register it as the repair step does its job.
+ */
+export async function forgetDevice(device: Device): Promise<void> {
+  if (busy.value) return;
+  busy.value = true;
+  try {
+    if (device.current) {
+      const registered = await registration();
+      const subscription = await registered?.pushManager.getSubscription().catch(() => null);
+      await subscription?.unsubscribe().catch(() => undefined);
+    }
+    deviceList.value = (await api.del<{ devices: Device[] }>(`/push/devices/${device.id}`)).devices;
+    await refresh();
+  } finally {
+    busy.value = false;
+  }
+}
+
 /**
  * Change one kind. Optimistic, because a switch that waits for a round trip before moving reads as
  * broken — and the server's answer replaces the guess either way.

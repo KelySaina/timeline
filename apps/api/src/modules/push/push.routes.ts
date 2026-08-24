@@ -11,7 +11,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireUser, verifyCsrf } from '../../middleware/session.js';
 import { valid, validate } from '../../middleware/validate.js';
-import { badRequest } from '../../lib/errors.js';
+import { badRequest, notFound } from '../../lib/errors.js';
 import { queryOne, query } from '../../db/pool.js';
 import * as push from './push.service.js';
 import { SEND_HOUR } from './reminders.js';
@@ -95,6 +95,33 @@ pushRouter.delete('/push/subscribe', verifyCsrf, validate(endpointBody), async (
   await push.removeSubscription(req.user!.id, endpoint);
   res.json({ subscribed: false, devices: await push.countSubscriptions(req.user!.id) });
 });
+
+/**
+ * The devices notifications go to, so one can be switched off from another. A phone left in a taxi
+ * is the case this exists for: nothing else could stop it receiving, since the switch on a device
+ * only ever governed that device.
+ */
+pushRouter.get(
+  '/push/devices',
+  validate(z.object({ endpoint: z.string().max(2000).optional() }), 'query'),
+  async (req, res) => {
+    const { endpoint } = valid<{ endpoint?: string }>(req, 'query');
+    res.json({ devices: await push.listDevices(req.user!.id, endpoint) });
+  },
+);
+
+pushRouter.delete(
+  '/push/devices/:id',
+  verifyCsrf,
+  validate(z.object({ id: z.string().uuid() }), 'params'),
+  async (req, res) => {
+    const removed = await push.removeDevice(req.user!.id, valid<{ id: string }>(req, 'params').id);
+    // A 404 rather than a silent success: an id that was never theirs must not look like a device
+    // they have just turned off.
+    if (!removed) throw notFound('That device is not one of yours');
+    res.json({ devices: await push.listDevices(req.user!.id) });
+  },
+);
 
 const prefsBody = z
   .object({
