@@ -192,6 +192,40 @@ What keeps MinIO from being *worse* than the volume it replaced (`infra/minio/bo
 
 MinIO is AGPLv3; running it unmodified as part of your own service is fine, but worth knowing.
 
+### Where the MinIO image comes from
+
+MinIO deleted `minio/minio` and `minio/mc` from Docker Hub in September 2026 and stopped serving
+them anonymously from quay.io days later, the last step of moving Community Edition to source-only.
+The old pinned tags cannot be fetched at all now — the repositories are gone, so the failure is
+`pull access denied`, not a rate limit. Existing boxes keep running only while the image stays in
+their local cache; anything fresh breaks.
+
+This stack therefore runs [Chainguard's](https://images.chainguard.dev/directory/image/minio/)
+free, source-built image of the same AGPL server, pinned **by digest** — the free tier publishes no
+version tags, only `:latest`, and a floating tag on the thing holding the photos is what the rest
+of this file avoids. `infra/minio/bootstrap.sh` runs against it unchanged, and the same image backs
+the `minio-init` service because it carries both `mc` and a shell. To take a newer build:
+
+```bash
+docker pull cgr.dev/chainguard/minio:latest
+docker inspect cgr.dev/chainguard/minio:latest --format '{{index .RepoDigests 0}}'
+```
+
+**Upgrading a box that already has photos:** the old image ran as root, this one runs as uid 65532,
+so the existing volume stays root-owned and the server exits with `drive may be faulty` instead of
+a permission error. The data is intact; only the ownership is wrong. `scripts/deploy.sh` refuses to
+deploy into that state rather than letting the health check fail into a rollback. Fix it once:
+
+```bash
+docker compose stop minio
+docker run --rm -v timeline_minio-data:/d alpine chown -R 65532:65532 /d
+```
+
+A frozen GHCR mirror of the deleted images is the other common answer; it takes no security fixes
+and is amd64-only, so it is a worse place to end up than a maintained build. If MinIO being a
+commercial dead end matters more than the migration cost, Garage and SeaweedFS are the S3-compatible
+replacements people are moving to — both would mean rewriting `bootstrap.sh`, which is `mc`-specific.
+
 ## How the story is drawn
 
 `couples.story_layout` sits beside `couples.theme` and works identically: it belongs to the

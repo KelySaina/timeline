@@ -40,6 +40,26 @@ preflight() {
   [ -n "$APP_DOMAIN" ] ||
     die "APP_DOMAIN is empty in .env — there is no hostname to route or health-check."
 
+  # MinIO's own images were deleted from Docker Hub in September 2026, so the stack now runs
+  # Chainguard's build — which, unlike the old one, runs as uid 65532 rather than root. A volume
+  # that already holds data written by the old image stays root-owned, and the server dies with
+  # "drive may be faulty" a few seconds in. Catch it here: the health check would otherwise fail
+  # and trigger a rollback to a tag whose compose file names an image that no longer exists.
+  minio_vol="${COMPOSE_PROJECT_NAME:-timeline}_minio-data"
+  if docker volume inspect "$minio_vol" >/dev/null 2>&1; then
+    minio_img="$(grep -m1 -oE 'cgr\.dev/chainguard/minio@sha256:[0-9a-f]+' docker-compose.yml || true)"
+    if [ -n "$minio_img" ] &&
+       ! docker run --rm -u 65532 -v "$minio_vol:/d" --entrypoint sh "$minio_img" \
+           -c 'test -w /d' >/dev/null 2>&1; then
+      die "the MinIO volume '$minio_vol' is not writable by uid 65532, which the current image
+       runs as. Its photos are intact; the ownership is what changed. Fix it once, with the
+       stack down, then re-run this deploy:
+
+         docker compose stop minio
+         docker run --rm -v $minio_vol:/d alpine chown -R 65532:65532 /d"
+    fi
+  fi
+
   case "$PROXY_MODE" in
     traefik)
       docker network inspect "${PROXY_NETWORK:-izyah}" >/dev/null 2>&1 ||
