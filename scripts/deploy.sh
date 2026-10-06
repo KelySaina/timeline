@@ -10,12 +10,15 @@
 #
 # Flow: sync the repo to the SHA -> preflight -> pull -> recreate api+web ->
 # poll the health endpoint -> on failure, roll back to the last good SHA.
+#
+# PROXY_MODE in .env decides what sits in front and therefore which compose files are
+# used: 'caddy-host' (a Caddy outside docker, base file only) or 'traefik' (the shared
+# Traefik on this box, plus docker-compose.prod.yml). Neither is started from here.
 # ============================================================================
 set -euo pipefail
 
 : "${IMAGE_TAG:?IMAGE_TAG is required}"
 
-COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.deploy.yml"
 LAST_GOOD_FILE=".deployed_tag"
 HEALTH_RETRIES=30   # 30 * 4s = up to 2 minutes for migrations + boot
 HEALTH_DELAY=4
@@ -34,15 +37,51 @@ preflight() {
   [ -x ./setup.sh ] || die "setup.sh is missing or not executable."
   ./setup.sh --check >/dev/null || die "setup.sh --check failed — run it directly to see why."
 
-  docker network inspect "${PROXY_NETWORK:-izyah}" >/dev/null 2>&1 ||
-    die "the Traefik network '${PROXY_NETWORK:-izyah}' does not exist on this host."
+  [ -n "$APP_DOMAIN" ] ||
+    die "APP_DOMAIN is empty in .env — there is no hostname to route or health-check."
 
-  [ -n "$(read_env APP_DOMAIN)" ] ||
-    die "APP_DOMAIN is empty in .env — Traefik has no hostname to route."
+  case "$PROXY_MODE" in
+    traefik)
+      docker network inspect "${PROXY_NETWORK:-izyah}" >/dev/null 2>&1 ||
+        die "the Traefik network '${PROXY_NETWORK:-izyah}' does not exist on this host."
+      ;;
+    caddy-host)
+      # The proxy lives outside this stack, so a deploy cannot bring it up — but it can
+      # refuse to start a two-minute health poll that was never going to pass.
+      command -v caddy >/dev/null 2>&1 ||
+        die "PROXY_MODE=caddy-host but caddy is not installed on this host."
+      systemctl is-active --quiet caddy ||
+        die "caddy is installed but not running — 'systemctl status caddy' says why."
+      grep -rqF "$APP_DOMAIN" /etc/caddy 2>/dev/null ||
+        die "no Caddy site answers for ${APP_DOMAIN} — run: sudo ./scripts/caddy-site.sh --install"
+      # The whole point of this mode: the stack must not be reachable around the proxy.
+      case "$(read_env WEB_BIND)" in
+        127.0.0.1) ;;
+        *) die "WEB_BIND is '$(read_env WEB_BIND)', not 127.0.0.1 — the app would be published
+       past Caddy in plain http. Fix: ./setup.sh --domain ${APP_DOMAIN} --proxy caddy-host" ;;
+      esac
+      ;;
+    *) die "PROXY_MODE in .env is '$PROXY_MODE' — expected caddy-host or traefik." ;;
+  esac
 }
 
 APP_DOMAIN="$(read_env APP_DOMAIN)"
 WEB_PORT="$(read_env WEB_PORT)"
+PROXY_MODE="$(read_env PROXY_MODE)"
+# A .env written before PROXY_MODE existed carries the Traefik overlay in COMPOSE_FILE instead.
+if [ -z "$PROXY_MODE" ]; then
+  case "$(read_env COMPOSE_FILE)" in
+    *docker-compose.prod.yml*) PROXY_MODE="traefik" ;;
+    *) PROXY_MODE="caddy-host" ;;
+  esac
+fi
+
+# caddy-host needs no overlay at all: the base file already binds the web container to
+# ${WEB_BIND}, which setup.sh pins to 127.0.0.1, and the proxy reaches it from the host.
+COMPOSE="docker compose -f docker-compose.yml"
+[ "$PROXY_MODE" = "traefik" ] && COMPOSE="$COMPOSE -f docker-compose.prod.yml"
+COMPOSE="$COMPOSE -f docker-compose.deploy.yml"
+
 HEALTH_URL="https://${APP_DOMAIN}/api/health"
 
 if [ -n "${GHCR_TOKEN:-}" ]; then
@@ -85,7 +124,12 @@ health_ok() {
     if [ "$i" = 3 ] && [ -n "$WEB_PORT" ]; then
       if curl -fsS --max-time 5 "http://127.0.0.1:${WEB_PORT}/api/health" >/dev/null 2>&1; then
         echo "  note: the app answers on 127.0.0.1:${WEB_PORT} but not through ${APP_DOMAIN}"
-        echo "        → routing/TLS problem, not the deploy. Check Traefik and DNS."
+        if [ "$PROXY_MODE" = "caddy-host" ]; then
+          echo "        → routing/TLS problem, not the deploy. Check DNS, then:"
+          echo "          journalctl -u caddy -n 50 --no-pager"
+        else
+          echo "        → routing/TLS problem, not the deploy. Check Traefik and DNS."
+        fi
       fi
     fi
     sleep "$HEALTH_DELAY"

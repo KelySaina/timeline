@@ -1,0 +1,69 @@
+# ============================================================================
+# Timeline — site block for a Caddy running on the host (apt + systemd), not in
+# this stack. Caddy owns 80/443 and ACME for every app on the box; the compose
+# stack publishes nothing but 127.0.0.1:${WEB_PORT}, so there is no way into the
+# app that does not come through this file.
+#
+# Rendered and installed by scripts/caddy-site.sh, which fills the two tokens
+# below from .env. They are Caddy's own environment placeholders rather than a
+# private syntax, so `APP_DOMAIN=... WEB_PORT=... caddy run` also takes this
+# file as it is — the script is a convenience, not a requirement.
+# ============================================================================
+
+{$APP_DOMAIN} {
+	# One upstream, on purpose. The web container is nginx (infra/nginx/web.conf):
+	# it serves the SPA, proxies /api/ to the API, and owns the cache rules, the
+	# page CSP and the security headers. Re-stating any of that here would give one
+	# answer two sources of truth, and they drift.
+
+	# Caddy is the only layer that terminates TLS, so it is the only one that can
+	# honestly assert this. nginx never sees an https request and does not set it.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+	# nginx already refuses a body over 12m (client_max_body_size). Refusing at the
+	# edge too means an oversized photo is cut off here instead of being carried all
+	# the way across the loopback to be rejected at the other end.
+	request_body {
+		max_size 12MB
+	}
+
+	# GET /api/stream is one server-sent event stream, held open for as long as a
+	# tab is signed in. Caddy does not buffer proxied responses, but it does batch
+	# writes — without flush_interval -1 an event can sit in the write buffer for
+	# seconds, which is indistinguishable from the app being broken.
+	#
+	# `encode` is deliberately missing from this handler: compressing a stream puts
+	# a second buffer in front of the first. nginx leaves the same location alone
+	# for the same reason (`gzip off` on /api/stream).
+	@stream path /api/stream
+	handle @stream {
+		reverse_proxy 127.0.0.1:{$WEB_PORT:4280} {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		encode zstd gzip
+
+		# GET /api/export is one response that can run to gigabytes and take minutes:
+		# it is built while it is sent. Nothing is configured for it here on purpose —
+		# Caddy applies no response timeout unless told to, so the only way to break
+		# that download is to add one.
+		#
+		# No `header_up X-Forwarded-For` here, and that is the safe choice rather than
+		# an omission: Caddy *replaces* the header with the peer it actually accepted
+		# the connection from, and only appends to a client-supplied one when that
+		# client is listed in `trusted_proxies` — which is empty by default. Verified
+		# against caddy v2.11.7: a request carrying `X-Forwarded-For: 1.2.3.4` reaches
+		# the upstream with the real address, not the invented one. That is what lets
+		# the API trust the header enough to rate limit on it (apps/api/src/app.ts).
+		reverse_proxy 127.0.0.1:{$WEB_PORT:4280}
+	}
+
+	log {
+		output file /var/log/caddy/timeline.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

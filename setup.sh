@@ -24,6 +24,7 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 
 DOMAIN=""
 MODE="local"
+PROXY_MODE=""
 WANT_WEB_PORT=""
 DO_START=0
 DO_SEED=0
@@ -57,6 +58,13 @@ usage() {
 Options
   --domain HOST       Public hostname. Implies HTTPS upstream: sets WEB_ORIGIN, COOKIE_SECURE=true,
                       and binds the web container to 127.0.0.1 for a reverse proxy to front.
+  --proxy MODE        Which reverse proxy fronts this, with --domain:
+                        caddy-host  a Caddy on the host (apt/systemd) reaching 127.0.0.1 — the
+                                    stack publishes no port to any other interface, and
+                                    scripts/caddy-site.sh writes the site block. Default.
+                        traefik     the shared Traefik already on this box: adds the
+                                    docker-compose.prod.yml overlay and its router labels.
+                      Remembered in .env, so later runs keep whichever was chosen.
   --web-port PORT     Preferred host port for the app (default 4280, auto-shifted if taken).
   --start             Build the images and bring the stack up when configuration is done.
   --seed              Load the demo couple. Refused when --domain is set (run 'npm run seed' there).
@@ -72,6 +80,13 @@ EOF
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="${2:?--domain needs a hostname}"; MODE="server"; shift 2 ;;
+    --proxy)
+      PROXY_MODE="${2:?--proxy needs caddy-host or traefik}"
+      case "$PROXY_MODE" in
+        caddy-host|traefik) ;;
+        *) die "--proxy takes 'caddy-host' or 'traefik', not '$PROXY_MODE'" ;;
+      esac
+      shift 2 ;;
     --web-port) WANT_WEB_PORT="${2:?--web-port needs a number}"; shift 2 ;;
     --start) DO_START=1; shift ;;
     --seed) DO_SEED=1; shift ;;
@@ -330,22 +345,50 @@ else
   WEB_BIND="0.0.0.0"
 fi
 # Keep whatever domain is already configured when this run did not pass --domain,
-# so re-running setup.sh on the server never silently un-routes Traefik.
+# so re-running setup.sh on the server never silently un-routes a live deployment.
 if [ -z "$DOMAIN" ]; then DOMAIN="$(read_env_value APP_DOMAIN)"; fi
 
-# Compose reads COMPOSE_FILE out of .env, so once this is set every plain
-# `docker compose ...` in this directory carries the production overlay. Without it the
-# stack comes up with no Traefik labels, no router matches the host, and Traefik answers
-# with its self-signed fallback certificate — which looks like a TLS bug and is not one.
+# Same for the proxy choice, and for the network name a Traefik deployment was pinned to:
+# both were previously taken from the environment alone, so a plain re-run on the server
+# reset PROXY_NETWORK to the default and moved the app off whichever network it was on.
+PROXY_NETWORK="${PROXY_NETWORK:-$(read_env_value PROXY_NETWORK)}"
+: "${PROXY_NETWORK:=izyah}"
+if [ -z "$PROXY_MODE" ]; then
+  PROXY_MODE="$(read_env_value PROXY_MODE)"
+fi
+if [ -z "$PROXY_MODE" ]; then
+  # No recorded choice. A .env written before --proxy existed has no PROXY_MODE but does
+  # carry the Traefik overlay in COMPOSE_FILE — honour that rather than silently moving a
+  # working deployment onto a Caddy that is not installed yet.
+  case "$(read_env_value COMPOSE_FILE)" in
+    *docker-compose.prod.yml*) PROXY_MODE="traefik" ;;
+    *) PROXY_MODE="caddy-host" ;;
+  esac
+fi
+
+# Compose reads COMPOSE_FILE out of .env, so once this is set every plain `docker compose ...`
+# in this directory carries the production overlay. Without it a Traefik deployment comes up
+# with no router labels, no router matches the host, and Traefik answers with its self-signed
+# fallback certificate — which looks like a TLS bug and is not one.
+#
+# caddy-host wants the opposite: the base file alone. The web container stays on 127.0.0.1 and
+# a proxy outside docker reaches it there, so there is no overlay, no external network, and
+# nothing for this project to own about TLS.
 COMPOSE_FILE_BLOCK=""
-if [ -n "$DOMAIN" ]; then
+if [ -n "$DOMAIN" ] && [ "$PROXY_MODE" = "traefik" ]; then
   COMPOSE_FILE_BLOCK="# Every \`docker compose\` in this directory picks these up (Traefik labels live in the overlay).
 COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml"
 fi
 
-if [ -n "$DOMAIN" ] && ! docker network inspect "${PROXY_NETWORK:-izyah}" >/dev/null 2>&1; then
-  warn "the Traefik network '${PROXY_NETWORK:-izyah}' does not exist on this host yet —"
+if [ -n "$DOMAIN" ] && [ "$PROXY_MODE" = "traefik" ] &&
+   ! docker network inspect "$PROXY_NETWORK" >/dev/null 2>&1; then
+  warn "the Traefik network '$PROXY_NETWORK' does not exist on this host yet —"
   warn "  the stack will not start until whichever project owns Traefik is up."
+fi
+
+if [ -n "$DOMAIN" ] && [ "$PROXY_MODE" = "caddy-host" ] && ! have caddy; then
+  warn "caddy is not installed on this host yet. The stack will run and listen on"
+  warn "  127.0.0.1:${WEB_PORT}, but nothing will answer for ${DOMAIN} until it is."
 fi
 
 if [ -n "$WEAK_KEYS" ]; then
@@ -391,9 +434,16 @@ VAPID_PRIVATE_KEY=$VAPID_PRIVATE_KEY
 VAPID_SUBJECT=$VAPID_SUBJECT
 
 # --- routing ---
-# Hostname Traefik routes to this app (docker-compose.prod.yml). Empty = no proxy.
+# Hostname the reverse proxy answers for. Empty = no proxy, reachable on localhost only.
 APP_DOMAIN=$DOMAIN
-PROXY_NETWORK=${PROXY_NETWORK:-izyah}
+# How this is fronted:
+#   caddy-host  a Caddy outside docker, reaching 127.0.0.1 on the port below. Nothing is
+#               published to any other interface. Install the site block with
+#               scripts/caddy-site.sh --install; it reads APP_DOMAIN and WEB_PORT from here.
+#   traefik     the shared Traefik on PROXY_NETWORK, via docker-compose.prod.yml.
+PROXY_MODE=$PROXY_MODE
+# Read in traefik mode only — the docker network whichever stack owns Traefik created.
+PROXY_NETWORK=$PROXY_NETWORK
 $COMPOSE_FILE_BLOCK
 
 # --- host ports ---
@@ -518,7 +568,7 @@ fi
 say "  ${BOLD}Not published${OFF}  postgres, minio — reachable only inside the compose network"
 say ""
 if [ "$DO_START" -eq 0 ]; then
-  if [ "$MODE" = "server" ]; then
+  if [ "$MODE" = "server" ] && [ "$PROXY_MODE" = "traefik" ]; then
     say "  Start it:      docker compose up -d --build   ${DIM}(COMPOSE_FILE in .env adds the Traefik overlay)${OFF}"
   else
     say "  Start it:      docker compose up -d --build"
@@ -529,7 +579,24 @@ say "  Demo data:     npm run seed"
 say "  Backups:       docker compose exec db pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} > dump.sql"
 say "                 mc mirror --overwrite minio/${S3_BUCKET} ./photo-backup   (see README)"
 say ""
-if [ "$MODE" = "server" ]; then
+if [ "$MODE" = "server" ] && [ "$PROXY_MODE" = "caddy-host" ]; then
+  say "  ${BOLD}Fronting it with Caddy${OFF}  ${DIM}(nothing answers for ${DOMAIN} until this is done)${OFF}"
+  say "   1. install the site block, validate it, reload caddy — one command:"
+  say "      ${BOLD}sudo ./scripts/caddy-site.sh --install${OFF}"
+  say "      ${DIM}Run it without --install first to read what it would write.${OFF}"
+  say "   2. point an A/AAAA record for ${DOMAIN} at this host. ACME will not issue a"
+  say "      certificate until the name resolves here."
+  say "   3. allow 80 and 443 only. Port ${WEB_PORT} is on loopback and must stay closed —"
+  say "      opening it serves the app in plain http, around the TLS you just set up."
+  say "   4. keep .env out of backups that leave the machine, or encrypt them."
+  say ""
+  say "  ${BOLD}If the certificate never arrives${OFF}, it is almost always DNS or a blocked :80,"
+  say "  not the app. In order:"
+  say "     ${DIM}curl -fsS http://127.0.0.1:${WEB_PORT}/api/health   # the stack itself${OFF}"
+  say "     ${DIM}journalctl -u caddy -n 50 --no-pager               # what ACME actually said${OFF}"
+  say "     ${DIM}curl -fsS https://${DOMAIN}/api/health             # the whole chain${OFF}"
+  say ""
+elif [ "$MODE" = "server" ]; then
   say "  ${BOLD}Before you point DNS at this:${OFF}"
   say "   1. terminate TLS upstream — COOKIE_SECURE=true means cookies will not survive plain http"
   say "   2. proxy ${DOMAIN} to 127.0.0.1:${WEB_PORT}, forwarding X-Forwarded-Proto"
@@ -539,7 +606,7 @@ if [ "$MODE" = "server" ]; then
   say "  ${BOLD}If the browser shows a self-signed certificate${OFF}, Traefik matched no router for"
   say "  this host — the app is running unrouted, which is not a TLS problem:"
   say "     docker compose config | grep traefik.http.routers   ${DIM}# labels present?${OFF}"
-  say "     docker network inspect ${PROXY_NETWORK:-izyah} | grep timeline-web"
+  say "     docker network inspect ${PROXY_NETWORK} | grep timeline-web"
   say ""
 fi
 if [ -n "$CHANGED_PORTS" ]; then

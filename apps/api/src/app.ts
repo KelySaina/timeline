@@ -19,7 +19,20 @@ import { upcomingRouter } from './modules/recurring/recurring.routes.js';
 export function createApp() {
   const app = express();
 
-  app.set('trust proxy', 1);
+  /*
+   * Two hops, not one. Every deployment puts nginx (the web container) in front of this, and a
+   * TLS edge in front of that — Caddy on the host, or Traefik on the docker network. nginx appends
+   * its own peer to X-Forwarded-For, so the header the API receives ends "<client>, <edge>", and
+   * `trust proxy: 1` resolved req.ip to that trailing edge address: one constant, identical for
+   * every visitor. rateLimit() keys anonymous callers on req.ip, so the whole internet shared a
+   * single bucket — the login and export limits counted everyone together.
+   *
+   * Counting from the app outwards, the real client sits at hop 2. A caller that prepends a value
+   * of its own cannot move it: the invention lands further left and is never read. Reaching the
+   * API directly (tests, `npm run dev`) sends no X-Forwarded-For at all, and req.ip falls back to
+   * the socket address, as it did before.
+   */
+  app.set('trust proxy', 2);
   app.disable('x-powered-by');
   app.use(
     helmet({

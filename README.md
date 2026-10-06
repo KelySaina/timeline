@@ -18,7 +18,8 @@ demo couple with a few years of story.
 
 ```bash
 ./setup.sh --check                                   # audit first: docker, ports, secret strength
-./setup.sh --domain timeline.example.com --start      # configure, build, run
+./setup.sh --domain timeline.example.com --start     # configure, build, run
+sudo ./scripts/caddy-site.sh --install               # put Caddy in front of it
 ```
 
 `setup.sh` is idempotent and does the boring-but-easy-to-get-wrong parts:
@@ -30,7 +31,9 @@ demo couple with a few years of story.
   whatever else lives on the box. Ports this stack already publishes are recognised as its own.
 - **`--domain`** — sets `WEB_ORIGIN`, turns on `COOKIE_SECURE`, and binds the web container to
   `127.0.0.1` so your TLS proxy is the only thing exposed. It then prints the remaining manual
-  steps: terminate TLS, forward `X-Forwarded-Proto`, keep 80/443 the only open ports.
+  steps for whichever proxy you chose.
+- **`--proxy`** — `caddy-host` (default) or `traefik`; see [Routing](#routing). Remembered in
+  `.env`, so later runs keep the choice.
 - **`--rotate`** — replaces weak secrets on a stack that already has data: `ALTER USER` for
   Postgres, a forced re-issue of the MinIO key, and a new `SESSION_SECRET` (which signs everyone
   out — the point of rotating it).
@@ -99,11 +102,48 @@ migration needs a hand-written reverse migration; reverting the images will not 
 
 ### Routing
 
-[`docker-compose.prod.yml`](docker-compose.prod.yml) attaches `web` to the Traefik network that
-already exists on the host (`PROXY_NETWORK`, default `izyah`) and adds the router labels for
-`APP_DOMAIN`. Traefik owns TLS and ACME for every app on the box, so this project ships no
-certificate handling of its own. `setup.sh --domain` fills in `APP_DOMAIN`, `WEB_ORIGIN`,
-`COOKIE_SECURE=true`, and binds the container to `127.0.0.1`.
+Nothing in this project terminates TLS. `setup.sh --domain` fills in `APP_DOMAIN`, `WEB_ORIGIN`,
+`COOKIE_SECURE=true`, and sets `WEB_BIND=127.0.0.1` — after which the only way in is through
+whatever you put in front. `PROXY_MODE` in `.env` records which that is, and `scripts/deploy.sh`
+reads it to decide which compose files to use.
+
+**`caddy-host` (default)** — a Caddy running on the host, outside docker. The stack publishes
+`127.0.0.1:${WEB_PORT}` and nothing else, so there is no overlay, no external docker network, and
+no port reachable from off the box. [`infra/caddy/timeline.caddyfile`](infra/caddy/timeline.caddyfile)
+is the site block; [`scripts/caddy-site.sh`](scripts/caddy-site.sh) renders it from `.env`, installs
+it under `/etc/caddy/sites/`, makes sure the main `Caddyfile` imports that directory, validates the
+result and reloads:
+
+```bash
+./scripts/caddy-site.sh                  # print what it would write, change nothing
+sudo ./scripts/caddy-site.sh --install   # install, validate, reload
+```
+
+Caddy is handed a rendered file with literal values rather than this project's `.env` — a process
+that needs a hostname and a port has no business holding the database password.
+
+**`traefik`** — [`docker-compose.prod.yml`](docker-compose.prod.yml) attaches `web` to the Traefik
+network that already exists on the host (`PROXY_NETWORK`, default `izyah`) and adds the router
+labels for `APP_DOMAIN`. Use this when something else on the box already owns 80/443.
+
+#### What the proxy chain has to get right
+
+Two hops sit in front of the API — the edge, then the `web` container's nginx — and both carry
+headers the app relies on:
+
+- **`X-Forwarded-For`** is what `rateLimit()` keys anonymous callers on. Caddy *replaces* it with
+  the peer it actually accepted the connection from, and only appends to a client-supplied value
+  for a client listed in `trusted_proxies` (empty by default), so a request arriving with an
+  invented address does not get to choose its own rate-limit bucket. nginx then appends Caddy, so
+  the API sees exactly `<client>, <edge>` — which is why it trusts **two** hops
+  ([`apps/api/src/app.ts`](apps/api/src/app.ts)). Trusting one resolved every visitor to the edge's
+  address: a single constant, and one shared bucket for the whole internet.
+- **`X-Forwarded-Proto`** only the edge can set honestly; nginx is always reached over plain http.
+  [`infra/nginx/web.conf`](infra/nginx/web.conf) forwards the incoming value and falls back to
+  `$scheme` only when nothing is in front, so running the API directly in development still works.
+
+A proxy of your own instead of these two must do the same, and must not let a client's
+`X-Forwarded-For` through untouched.
 
 ### First deploy on a new box
 
@@ -111,8 +151,16 @@ certificate handling of its own. `setup.sh --domain` fills in `APP_DOMAIN`, `WEB
 # on the server
 git clone https://github.com/KelySaina/timeline.git ~/timeline && cd ~/timeline
 ./setup.sh --domain timeline.example.com     # generates secrets, writes .env, picks ports
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose up -d --build                 # listens on 127.0.0.1 only
+sudo ./scripts/caddy-site.sh --install       # Caddy answers for the domain, gets the certificate
 ```
+
+Point DNS at the box before that last step: ACME will not issue a certificate for a name that does
+not resolve there. Open 80 and 443, and nothing else — `WEB_PORT` stays on loopback.
+
+With `--proxy traefik` the last line is instead `docker compose -f docker-compose.yml -f
+docker-compose.prod.yml up -d --build`, and `setup.sh` writes a `COMPOSE_FILE` into `.env` so a
+plain `docker compose` picks the overlay up on its own.
 
 Then in the repo settings (or with `gh`): `SSH_HOST`, `SSH_USER`, `SSH_KEY`, and optionally
 `SSH_PORT`. No `GHCR_PAT` is needed — the workflow's own `GITHUB_TOKEN` can pull the images for the

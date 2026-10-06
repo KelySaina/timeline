@@ -202,6 +202,7 @@ jobs:
               echo "::error::~/timeline does not exist on this host — bootstrap it once, then re-run this job:"
               echo "  git clone https://github.com/${{ github.repository }}.git ~/timeline"
               echo "  cd ~/timeline && ./setup.sh --domain <your-host>"
+              echo "  sudo ./scripts/caddy-site.sh --install   # or --proxy traefik above"
               exit 1
             fi
             cd ~/timeline
