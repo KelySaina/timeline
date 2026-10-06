@@ -86,7 +86,6 @@ command -v caddy >/dev/null 2>&1 ||
   die "caddy is not installed. See https://caddyserver.com/docs/install#debian-ubuntu-raspbian"
 
 install -d -m 0755 "$SITE_DIR"
-install -d -m 0755 -o caddy -g caddy /var/log/caddy 2>/dev/null || install -d -m 0755 /var/log/caddy
 render > "$SITE_FILE.new"
 chmod 0644 "$SITE_FILE.new"
 
@@ -116,7 +115,21 @@ else
   die "the Caddyfile does not validate — $SITE_FILE is in place but Caddy was NOT reloaded."
 fi
 
-systemctl reload caddy && ok "caddy reloaded"
+# `cmd && ok "..."` would hide a failure here: in an && list, only the LAST command
+# is subject to `set -e`, so a failed reload let this script carry on and print the
+# success steps below. Validation passing does not mean loading will: validate checks
+# syntax, not whether the caddy user can open a file or bind a port.
+if systemctl reload caddy; then
+  ok "caddy reloaded"
+else
+  say ""
+  systemctl status caddy --no-pager --lines=15 >&2 || true
+  die "caddy did not reload, and the site is NOT live. $SITE_FILE is installed and the
+       import is in $MAIN_CADDYFILE, so fix the cause above and re-run:
+         sudo systemctl reload caddy
+       The previously running config is still serving, so other sites are unaffected —
+       but a 'systemctl restart caddy' would now fail and take them down too."
+fi
 
 say ""
 say "  ${BOLD}Next${OFF}"

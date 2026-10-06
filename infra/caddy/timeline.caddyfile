@@ -60,10 +60,9 @@
 		reverse_proxy 127.0.0.1:{$WEB_PORT:4280}
 	}
 
-	log {
-		output file /var/log/caddy/timeline.log {
-			roll_size 10MiB
-			roll_keep 5
-		}
-	}
+	# No `log` block, deliberately. Caddy's access log goes to journald with the rest
+	# of the service, where `journalctl -u caddy` already looks. Writing to a file
+	# instead needs a directory the caddy user can write, which `caddy validate` does
+	# NOT check — so a wrong one passes validation and then fails the actual reload,
+	# which is a confusing way to find out.
 }
